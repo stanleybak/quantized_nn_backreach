@@ -4,6 +4,7 @@ Backreach using quantized inputs
 
 from typing import List, Tuple
 
+from copy import deepcopy
 from math import pi
 
 import numpy as np
@@ -28,17 +29,31 @@ class State():
     pos_quantum = 100
     vel_quantum = 100
 
+    next_state_id = 0
+
     def __init__(self, alpha_prev:int, q_v_own:float, q_v_int:float, star:Star):
-        self.alpha_prev = alpha_prev
+        self.alpha_prev_list = [alpha_prev]
         self.q_v_own = q_v_own
         self.q_v_int = q_v_int
         
         self.star = star
+        
+        self.state_id = -1
+        self.assign_state_id()
+
+    def __str__(self):
+        return f"State(id={self.state_id} with alpha_prev_list = {self.alpha_prev_list})"
+
+    def assign_state_id(self):
+        """assign and increment state_id"""
+
+        self.state_id = State.next_state_id
+        State.next_state_id += 1
 
     def backstep(self):
-        # step backwards according to alpha_prev
+        """step backwards according to alpha_prev"""
 
-        mat = get_time_elapse_mat(self.alpha_prev, -1.0)
+        mat = get_time_elapse_mat(self.alpha_prev_list[-1], -1.0)
 
         self.star.a_mat = self.star.a_mat @ mat
         self.star.b_vec = self.star.b_vec @ mat
@@ -128,6 +143,10 @@ class State():
 def main():
     """main entry point"""
 
+    print("LATEST IDEA: just have a theta discretization for ownship and intruder, not for vx, vy")
+    print("you can instersect star in specific discretization angles, since it's pizza slices on vx/vy plane")
+    exit(1)
+
     alpha_prev = 4
 
     x_own = (-500, -450)
@@ -135,47 +154,95 @@ def main():
     #psi_own = (1*2*pi / 16, 2*2*pi / 16)
     psi_own = (0*2*pi / 32, 1*2*pi / 32)
         
-    v_int = (400, 450)
-    v_own = (600, 650)
+    v_int = (425, 475)
+    v_own = (625, 675)
 
-    q_v_own = 425
-    q_v_int = 525
+    assert v_int[1] - v_int[0] == 50 and v_int[0] % 50 == 25
+    assert v_own[1] - v_own[0] == 50 and v_own[0] % 50 == 25
+    q_v_int = (v_int[0] + v_int[1]) / 2
+    q_v_own = (v_own[0] + v_own[1]) / 2
 
     box, a_mat, b_vec = init_to_constraints(v_own, v_int, x_own, y_own, psi_own)
 
-    init_star = Star(box_bounds, a_mat, b_vec)
+    init_star = Star(box, a_mat, b_vec)
     init_s = State(alpha_prev, q_v_own, q_v_int, init_star)
 
     p = Plotter()
     p.plot_star(init_s.star)
 
     work = [init_s]
+    colors = ['b', 'lime', 'r', 'g', 'magenta', 'cyan', 'pink']
+    popped = 0
 
     while work:
         s = work.pop()
         
         # compute previous state
         s.backstep()
-        p.plot_star(s.star, 'b')
+        p.plot_star(s.star, colors[popped % len(colors)])
+        popped += 1
 
-        l = s.get_qstates_qstars()
-        print(f"len: {len(l)}")
+        q_list = s.get_qstates_qstars()
+        print(f"popped state {s} num quantized states: {len(q_list)}")
 
-        p.plot_quantization(l)
+        #p.plot_quantization(l)
+        no_predecessors = True
 
         for alpha_prev in range(5):
-            all_same = True
-            print(":WORKNIG HER!!!!!! avoid splitting if possib,e hceck for end!")        
-            #for qstate, _ in l:
-            #    cmd = qstate_cmd(alpha_prev, qstate)
+            cmds = [qstate_cmd(alpha_prev, qstate) for qstate, _ in q_list]
 
-            #    if cmd !=
-                
-            #    if cmd == s.alpha_prev:
+            all_correct = all(cmd == s.alpha_prev_list[-1] for cmd in cmds[1:])
+            num_correct = 0
 
+            if all_correct:                
+                # if all correct, propagate the entire set without splitting
+                next_s = deepcopy(s)
+                next_s.assign_state_id()
+                next_s.alpha_prev_list.append(alpha_prev)
+                work.append(next_s)
 
-    plt.tight_layout()
-    plt.show()
+                print(f"alpha_prev: {alpha_prev}, all_correct: {all_correct} - {next_s}")
+
+                domain_pt, range_pt = next_s.star.get_center_witness()
+                print(f"end = np.{repr(domain_pt)}\nstart = np.{repr(range_pt)}")
+            else:
+                state_strs = []
+                    
+                for (qstate, qstar), cmd in zip(q_list, cmds):
+                    if cmd == s.alpha_prev_list[-1]:
+                        num_correct += 1
+
+                        next_s = deepcopy(s)
+                        next_s.assign_state_id()
+                        next_s.alpha_prev_list.append(alpha_prev)
+                        next_s.star = qstar
+                        work.append(next_s)
+
+                        state_strs.append(str(next_s))
+
+                        print(f"details of state {next_s}")
+                        domain_pt, range_pt = s.star.get_center_witness()
+                        print(f"end = np.{repr(domain_pt)}\nstart = np.{repr(range_pt)}")
+
+                        qstate_cmd(alpha_prev, qstate, stdout=True)
+                        
+                        exit(1)
+
+                print(f"alpha_prev {alpha_prev}: num correct: {num_correct}/{len(cmds)} - {state_strs}")
+
+            if not all_correct and num_correct == 0:
+                print(f"no predecessors of state {s}")
+                domain_pt, range_pt = s.star.get_center_witness()
+                print(f"end = np.{repr(domain_pt)}\nstart = np.{repr(range_pt)}")
+
+        if popped == 1:
+            print(f"work queue size: {len(work)}")
+            plt.tight_layout()
+            #plt.show()
+            break
+
+    print(f"q_v_int = {q_v_int}")
+    print(f"q_v_own = {q_v_own}")
 
 if __name__ == "__main__":
     main()

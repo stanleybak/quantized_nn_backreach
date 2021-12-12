@@ -13,10 +13,13 @@ import numpy as np
 
 import onnxruntime as ort
 
-def qstate_cmd(alpha_prev, qstate):
+def qstate_cmd(alpha_prev, qstate, stdout=False):
     """get the command at the given quantized state"""
 
     assert isinstance(alpha_prev, int) and 0 <= alpha_prev <= 4, f"alpha_prev was {alpha_prev}"
+
+    if stdout:
+        print(f"qstate: {qstate}")
 
     dx, dy, vxo, vyo, vxi, v_own, v_int = qstate
     vyi = 0
@@ -37,6 +40,8 @@ def qstate_cmd(alpha_prev, qstate):
         psi = theta2 - theta1
         #print(f"dvy = {dvy}, dvx = {dvx}, psi = {psi}")
 
+        theta -= theta1 # angle to intruder relative to ownship heading direction
+
         # get angles into range
         while theta < -np.pi:
             theta += 2 * np.pi
@@ -49,6 +54,9 @@ def qstate_cmd(alpha_prev, qstate):
 
         while psi > np.pi:
             psi -= 2 * np.pi
+
+        if stdout:
+            print(f"qinputs: {rho, theta, psi, v_own, v_int}")
 
         i = np.array([rho, theta, psi, v_own, v_int])
         net = get_network(alpha_prev)

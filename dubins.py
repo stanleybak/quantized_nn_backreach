@@ -3,7 +3,7 @@ quantized backreach code for dynamics
 """
 
 from typing import Tuple, List
-from math import sin, cos, pi, atan2
+from math import sin, cos, pi
 
 from functools import lru_cache
 
@@ -95,22 +95,6 @@ def init_to_constraints(v_own: Tuple[float, float], v_int: Tuple[float, float],
 
     return rv, a_mat, b_vec
 
-#@njit(cache=True)
-def step_state(state7, v_own, v_int, time_elapse_mat, dt):
-    """perform one time step with the given commands"""
-
-    state8_vec = state7_to_state8(state7, v_own, v_int)
-
-    s = time_elapse_mat @ state8_vec
-
-    # extract observation (like theta) from state
-    new_time = state7[-1] + dt
-    theta1 = atan2(s[3], s[2])
-    theta2 = atan2(s[7], s[6])
-    rv = np.array([s[0], s[1], theta1, s[4], s[5], theta2, new_time])
-
-    return rv
-
 @lru_cache(maxsize=None)
 def get_time_elapse_mat(command1, dt):
     '''get the matrix exponential for the given command
@@ -136,53 +120,3 @@ def get_time_elapse_mat(command1, dt):
     assert a_mat.shape[0] == a_mat.shape[1]
 
     return expm(a_mat * dt)
-
-#@njit(cache=True)
-def state7_to_state5(state7, v_own, v_int):
-    """compute rho, theta, psi from state7"""
-
-    assert len(state7) == 7
-
-    x1, y1, theta1, x2, y2, theta2, _ = state7
-
-    rho = np.sqrt((x1 - x2)**2 + (y1 - y2)**2)
-
-    dy = y2 - y1
-    dx = x2 - x1
-
-    theta = np.arctan2(dy, dx)
-    psi = theta2 - theta1
-
-    theta -= theta1
-
-    while theta < -np.pi:
-        theta += 2 * np.pi
-
-    while theta > np.pi:
-        theta -= 2 * np.pi
-
-    if psi < -np.pi:
-        psi += 2 * np.pi
-
-    while psi > np.pi:
-        psi -= 2 * np.pi
-
-    return np.array([rho, theta, psi, v_own, v_int])
-
-#@njit(cache=True)
-def state7_to_state8(state7, v_own, v_int):
-    """compute x,y, vx, vy, x2, y2, vx2, vy2 from state7"""
-
-    assert len(state7) == 7
-
-    x1 = state7[0]
-    y1 = state7[1]
-    vx1 = cos(state7[2]) * v_own
-    vy1 = sin(state7[2]) * v_own
-
-    x2 = state7[3]
-    y2 = state7[4]
-    vx2 = cos(state7[5]) * v_int
-    vy2 = sin(state7[5]) * v_int
-
-    return np.array([x1, y1, vx1, vy1, x2, y2, vx2, vy2])
