@@ -92,8 +92,23 @@ class Star:
 
         return verts
 
+    def add_dense_row(self, vec, rhs):
+        """intersect the domain with a linear constraint"""
+
+        # vec * (A*alpha + b) <= rhs
+
+        lp_vec = vec @ self.a_mat
+        lp_rhs = rhs - vec @ self.b_vec
+
+        self.hpoly.add_dense_row(lp_vec, lp_rhs)
+
+    def is_feasible(self):
+        """is the star feasible?"""
+
+        return self.hpoly.is_feasible()
+
     def minimize_vec(self, vec, return_io=False, fail_on_unsat=True):
-        '''optimize over this set
+        """optimize over this set
 
         vec is the vector of outputs we're optimizing over, None means use zero vector
 
@@ -101,7 +116,7 @@ class Star:
         note that the cinput will be the compressed input if input space is not full dimensional
 
         returns all the outputs (coutput) if return_io=False, else (cinput, coutput)
-        '''
+        """
 
 
         if vec is None:
@@ -112,10 +127,10 @@ class Star:
 
         assert isinstance(vec, np.ndarray)
 
-        lp_vec = np.dot(self.a_mat.T, vec)
+        lp_vec = vec @ self.a_mat
+        assert lp_vec.shape == (len(lp_vec),)
 
         num_init_vars = self.a_mat.shape[1]
-        lp_vec.shape = (len(lp_vec),)
 
         lp_result = self.hpoly.minimize(lp_vec, fail_on_unsat=fail_on_unsat)
 

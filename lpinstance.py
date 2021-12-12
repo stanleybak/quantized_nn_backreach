@@ -87,6 +87,9 @@ class LpInstance(Freezable):
                 
             self.lp = None
 
+    def __deepcopy__(self, memo):
+        return LpInstance(self)
+
     def serialize(self):
         'serialize self.lp from a glpk instance into a tuple'
 
@@ -474,7 +477,7 @@ class LpInstance(Freezable):
                     assert lb < ub
                     glpk.glp_set_col_bnds(self.lp, num_cols + i + 1, glpk.GLP_DB, lb, ub)  # double-bounded variable
 
-    def add_dense_row(self, vec, rhs, normalize=True):
+    def add_dense_row(self, vec, rhs, normalize=False):
         '''
         add a row from a dense nd.array, row <= rhs
         '''
