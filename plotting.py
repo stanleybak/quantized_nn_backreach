@@ -12,33 +12,32 @@ from star import Star
 class Plotter:
     """object in charge of plotting"""
 
-    def __init__(self):
+    def __init__(self, equal=True):
 
         self.fig, self.ax_list = plt.subplots(2, 3, figsize=(12, 8))
 
-        for ax_row in self.ax_list:
-            for ax in ax_row:
-                ax.axis('equal')
+        if equal:
+            for ax_row in self.ax_list:
+                for ax in ax_row:
+                    ax.axis('equal')
 
         p = 'resources/bak_matplotlib.mlpstyle'
         plt.style.use(['bmh', p])
 
-    def plot_quantization(self, qlist):
+    def plot_quantization(self, q_list):
         """plot quantized states"""
 
         dxs = []
         dys = []
-        vxos = []
-        vyos = []
+        #vxos = []
+        #vyos = []
         #vxis = []
 
-        for qstate, qstar in qlist:
-            dx, dy, vxo, vyo, _vxi, _, _ = qstate
+        for qstate, qstar in q_list:
+            dx, dy = qstate[:2]
 
             dxs.append(dx)
             dys.append(dy)
-            vxos.append(vxo)
-            vyos.append(vyo)
             #vxis.append(vxi)
 
             # plot qstar
@@ -49,14 +48,16 @@ class Plotter:
         ax.plot(dxs, dys, "go")
 
         # vxo/vyo plot
-        ax = self.ax_list[0][1]
-        ax.plot(vxos, vyos, "go")
+        #ax = self.ax_list[0][1]
+        #ax.plot(vxos, vyos, "go")
 
     def plot_star(self, star, color='k'):
         """add the current state to the plot"""
 
         labels = ("X_own", "Y_own", "VX_own", "VY_own", "X_int", "VX_int")
         index = 0
+
+        witness = star.get_witness()[1]
 
         for index in range(3):
             ax = self.ax_list[0][index]
@@ -66,6 +67,8 @@ class Plotter:
 
             verts = star.verts(2*index, 2*index + 1)
             ax.plot(*zip(*verts), '-', color=color, zorder=1)
+
+            ax.plot([witness[2*index]], [witness[2*index + 1]], 'o', color=color, zorder=1)
 
         # plot 4: deltax / deltay
         # dx = x_int - x_own
@@ -84,6 +87,10 @@ class Plotter:
 
         verts = star.verts(xdim, ydim)
         ax.plot(*zip(*verts), '-', color=color, zorder=1)
+
+        proj_witness_dx = xdim @ witness
+        proj_witness_dy = ydim @ witness
+        ax.plot([proj_witness_dx], [proj_witness_dy], 'o', color=color, zorder=1)
 
         # plot 5: deltavx / deltavy
         # dvx = vx_int - vx_own

@@ -110,22 +110,23 @@ def run_network(network_tuple, x, stdout=False):
     return outputs[0][0]
 
 def quantize(x, delta=50):
-    """round to the nearest delta"""
+    """round to the nearest delta (offset by delta / 2)
 
-    return delta * round(x / delta)
+    for example using 50 will round anything between 0 and 50 to 25
+    """
 
-def state8_to_qstate5(state8, q_v_own, q_v_int):
+    return delta/2 + delta * round((x - delta/2) / delta)
+
+def state8_to_qstate5(state8, stdout=False):
     """compute rho, theta, psi from state7"""
 
     assert len(state8) == 8
 
     # quantization
-    pos_quantum = 100
-    vxvy_quantum = 100
-    vel_quantum = 50
+    pos_quantum = 200
+    vel_quantum = 200
 
-    assert q_v_own % vel_quantum == 0
-    assert q_v_int % vel_quantum == 0
+    theta1_quantum = 0.02617993877991494 # 1.5 degrees
 
     x1, y1, vxo, vyo, x2, y2, vxi, vyi = state8
 
@@ -135,21 +136,25 @@ def state8_to_qstate5(state8, q_v_own, q_v_int):
     rho = np.sqrt(dx**2 + dy**2)
     theta = np.arctan2(dy, dx)
 
-    # psi should be computed from discretized velocities
-    vxo = quantize(vxo, vxvy_quantum)
-    vyo = quantize(vyo, vxvy_quantum)
-    vxi = quantize(vxi, vxvy_quantum)
-    vyi = quantize(vyi, vxvy_quantum)
+    # psi should be 
+    theta1 = np.arctan2(vyo, vxo) ## theta 1 is using ownship!!
 
-    print(f"state8_to_qstate5. state8: {state8}")
-    print(f"v_own = {vxo, vyo}, v_int = {vxi, vyi}")
+    print(f"in state8_to_qstate5, real theta1: {theta1}")
 
-    qtheta1 = math.atan2(vyo, vxo)
-    qtheta2 = math.atan2(vyi, vxi)
-    
-    psi = qtheta2 - qtheta1
+    assert abs(vyi) < 1e-6
+    assert vxi >= 0
+    theta2 = 0
+    theta1 = quantize(theta1, theta1_quantum)
 
-    theta -= qtheta1
+    print(f"quantized theta1: {theta1}")
+
+    theta1_deg = theta1 * 360/(2*math.pi)
+    print(f"theta1 quantized: {round(theta1_deg, 3)} deg")
+    print(f"ownship vx / vy = {vxo}, {vyo}")
+
+    psi = theta2 - theta1
+
+    theta -= theta1
 
     while theta < -np.pi:
         theta += 2 * np.pi
@@ -162,6 +167,20 @@ def state8_to_qstate5(state8, q_v_own, q_v_int):
 
     while psi > np.pi:
         psi -= 2 * np.pi
+
+    own_vel = math.sqrt(vxo**2 + vyo**2)
+    int_vel = math.sqrt(vxi**2)
+
+    q_v_own = quantize(own_vel, vel_quantum)
+    q_v_int = quantize(int_vel, vel_quantum)
+
+    if stdout:
+        print(f"dx: {dx}")
+        print(f"dy: {dy}")
+        print(f"theta1: {theta1}")
+        print(f"theta2: {theta2}")
+        print(f"q_v_own: {q_v_own}")
+        print(f"q_v_int: {q_v_int}")
 
     return np.array([rho, theta, psi, q_v_own, q_v_int])
 
@@ -217,9 +236,6 @@ class State:
 
     def __init__(self, init_vec, save_states=False):
         assert len(init_vec) == 8, "init vec should have length 8"
-
-        self.q_v_own = 800.0
-        self.q_v_int = 500.0
         
         self.state8 = np.array(init_vec, dtype=float) # current state
         self.next_nn_update = 0.0
@@ -433,7 +449,7 @@ class State:
             print(f"\nupdating nn command. Using network #{self.command}")
 
             # update command
-            self.update_command()
+            self.update_command(stdout=stdout)
 
             print(f"nn output cmd was {self.command}")
 
@@ -499,12 +515,13 @@ class State:
             assert not self.commands
             assert not self.int_commands
 
-    def update_command(self):
+    def update_command(self, stdout=False):
         'update command based on current state'''
 
-        rho, theta, psi, v_own, v_int = state8_to_qstate5(self.state8, self.q_v_own, self.q_v_int)
+        rho, theta, psi, v_own, v_int = state8_to_qstate5(self.state8, stdout=stdout)
 
-        print(f"qstate input is: {rho, theta, psi, v_own, v_int}")
+        print(f"state8: {self.state8}")
+        print(f"qstate5: {rho, theta, psi, v_own, v_int}")
 
         # 0: rho, distance
         # 1: theta, angle to intruder relative to ownship heading
@@ -634,38 +651,47 @@ def main():
 
     q_v_int = 450.0
     q_v_own = 650.0
+    q_theta1 = 0.06544984694978735
+    q_theta2 = 0.0
 
-    end = np.array([-475.        ,  -25.        ,  643.99540013,   65.84298368,
-          0.        ,  450.        ])
-    start = np.array([-1116.97781063,  -107.66881109,   639.6668713 ,    99.45686324,
-            -450.        ,   450.        ])
+    end = np.array([-454.16666667,  -12.5       ,  645.64914551,   14.77919022,
+          0.        ,  404.16666667])
+    start = np.array([-1099.13400874,   -44.17163188,   643.99082274,    48.54960129,
+            -404.16666667,   404.16666667])
 
-    alpha_prev_list = [4, 0]
+    alpha_prev_list = [4, 4]
 
     # intruder command list
-    cmd_list = [0] * len(alpha_prev_list)
+    cmd_list = [0] * (len(alpha_prev_list) - 1)
 
     _, _, vx, vy, _, vxi = start
 
     own_vel = math.sqrt(vx**2 + vy**2)
-    own_heading = math.atan2(vy, vx)
-
     int_vel = math.sqrt(vxi**2)
-    int_heading = math.atan2(0, vxi)
 
-    print(f"own_vel: {own_vel}, own_heading: {own_heading}")
-    print(f"int_vel: {int_vel}, int_heading: {int_heading}")
+    print(f"own_vel computed: {own_vel}, quantized: {q_v_own}")
+    print(f"int_vel computed: {int_vel}, quantized: {q_v_int}")
+
+    print(f"ownship vx / vy = {vx}, {vy}")
+
+    theta1 = math.atan2(vy, vx)
+    print(f"real theta1: {theta1}")
+    theta1_deg = theta1 * 360/(2*math.pi)
+    q_theta1_deg = q_theta1 * 360/(2*math.pi)
+    print(f"q_theta1 computed: {round(theta1_deg, 3)} deg, quantized: {round(q_theta1_deg, 3)} deg")
+
+    actual_qtheta1 = quantize(theta1, 2*math.pi / (360 / 1.5))
+    print(f"actual_qtheta1: {actual_qtheta1}")
+    actual_qtheta1_deg = actual_qtheta1 * 360/(2*math.pi)
+    print(f"actual_qtheta1_deg = {actual_qtheta1_deg}")
+    assert abs(actual_qtheta1 - q_theta1) < 1e-4, f"qtheta1 was actually {round(actual_qtheta1_deg, 3)}, " + \
+        f"expected {round(q_theta1_deg, 3)}"
 
     init_vec = [start[0], start[1], start[2], start[3], start[4], 0, start[5], 0]
     
     # run the simulation
     s = State(init_vec, save_states=True)
 
-    s.v_own = own_vel
-    s.v_int = int_vel
-    s.q_v_own = q_v_own
-    s.q_v_int = q_v_int
-    
     s.command = alpha_prev_list[-1]
     
     s.simulate(cmd_list, stdout=True)

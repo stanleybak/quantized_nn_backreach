@@ -107,26 +107,25 @@ class Star:
 
         return self.hpoly.is_feasible()
 
-    def get_center_witness(self):
-        """get a center point in both the domain and range of the star"""
+    def get_witness(self):
+        """get a witness point of the star, trying to be close to the center"""
 
         assert self.hpoly.is_feasible()
-        domain_list = []
-
         dims = self.hpoly.get_num_cols()
         lp_vec = np.zeros(dims)
 
+        domain_pt = lp_vec.copy()
+        num_pts = 2*dims
+
         for dim in range(dims):
             lp_vec[dim] = 1.0
-            low = self.hpoly.minimize(lp_vec)[dim]
+            domain_pt += self.hpoly.minimize(lp_vec) / num_pts
 
             lp_vec[dim] = -1.0
-            high = self.hpoly.minimize(lp_vec)[dim]
+            domain_pt += self.hpoly.minimize(lp_vec) / num_pts
 
             lp_vec[dim] = 0.0
-            domain_list.append((low + high) / 2)
-
-        domain_pt = np.array(domain_list, dtype=float)
+        
         range_pt = self.a_mat @ domain_pt + self.b_vec
 
         return domain_pt, range_pt
@@ -163,7 +162,7 @@ class Star:
             assert len(lp_result) == num_init_vars
 
             # convert optimization result back to output space
-            rv = np.dot(self.a_mat, lp_result) + self.b_vec
+            rv = self.a_mat @ lp_result + self.b_vec
 
         # return input as well
         if rv is not None and return_io:

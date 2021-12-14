@@ -13,7 +13,7 @@ from scipy.linalg import expm
 from star import Star
 
 def init_to_constraints(v_own: Tuple[float, float], v_int: Tuple[float, float],
-                 x: Tuple[float, float], y: Tuple[float, float], psi: Tuple[float, float]):
+                 x: Tuple[float, float], y: Tuple[float, float], theta1: Tuple[float, float]):
     """convert initial variables to box bounds and constraints in linear space
 
     returns box, a_mat, b_vec with Ax <= b constraints
@@ -26,22 +26,22 @@ def init_to_constraints(v_own: Tuple[float, float], v_int: Tuple[float, float],
     rv.append(x)
     rv.append(y)
 
-    # compute vx and vy from psi and v_own
+    # compute vx and vy from theta1 and v_own
     tol = 1e-9
 
     # make sure limit will be one of the four sampled combinations
-    assert psi[0] < psi[1] and psi[0] + tol >= 0 and psi[1] - tol <= 2*pi
-    assert not (psi[0] + tol < pi/2 < psi[1] - tol)
-    assert not (psi[0] + tol < pi < psi[1] - tol)
-    assert not (psi[0] + tol < 3*pi/2 < psi[1] - tol)
+    assert theta1[0] < theta1[1] and theta1[0] + tol >= 0 and theta1[1] - tol <= 2*pi
+    assert not (theta1[0] + tol < pi/2 < theta1[1] - tol)
+    assert not (theta1[0] + tol < pi < theta1[1] - tol)
+    assert not (theta1[0] + tol < 3*pi/2 < theta1[1] - tol)
     
     vx = []
     vy = []
 
-    for psi_scalar in psi:
+    for theta1_scalar in theta1:
         for v_own_scalar in v_own:
-            vx.append(cos(psi_scalar) * v_own_scalar)
-            vy.append(sin(psi_scalar) * v_own_scalar)
+            vx.append(cos(theta1_scalar) * v_own_scalar)
+            vy.append(sin(theta1_scalar) * v_own_scalar)
 
     rv.append((min(vx), max(vx)))
     rv.append((min(vy), max(vy)))
@@ -50,21 +50,21 @@ def init_to_constraints(v_own: Tuple[float, float], v_int: Tuple[float, float],
 
     # top-left
     row = [0.0] * Star.NUM_VARS
-    row[Star.VX_OWN] = -sin(psi[1])
-    row[Star.VY_OWN] = cos(psi[1])
+    row[Star.VX_OWN] = -sin(theta1[1])
+    row[Star.VY_OWN] = cos(theta1[1])
     a_mat.append(row)
     b_vec.append(0)
 
     # bottom-right
     row = [0.0] * Star.NUM_VARS
-    row[Star.VX_OWN] = sin(psi[0])
-    row[Star.VY_OWN] = -cos(psi[0])
+    row[Star.VX_OWN] = sin(theta1[0])
+    row[Star.VY_OWN] = -cos(theta1[0])
     a_mat.append(row)
     b_vec.append(0)
 
     # bottom-left
-    p1 = np.array([cos(psi[1]), sin(psi[1])]) * v_own[0]
-    p2 = np.array([cos(psi[0]), sin(psi[0])]) * v_own[0]
+    p1 = np.array([cos(theta1[1]), sin(theta1[1])]) * v_own[0]
+    p2 = np.array([cos(theta1[0]), sin(theta1[0])]) * v_own[0]
     delta = p1 - p2
     row = [0.0] * Star.NUM_VARS
     row[Star.VX_OWN] = -delta[1]
@@ -74,7 +74,7 @@ def init_to_constraints(v_own: Tuple[float, float], v_int: Tuple[float, float],
     b_vec.append(r)
 
     # top right (#1, left one)
-    p1 = np.array([cos(psi[1]), sin(psi[1])])
+    p1 = np.array([cos(theta1[1]), sin(theta1[1])])
     row = [0.0] * Star.NUM_VARS
     row[Star.VX_OWN] = p1[0]
     row[Star.VY_OWN] = p1[1]
@@ -82,7 +82,7 @@ def init_to_constraints(v_own: Tuple[float, float], v_int: Tuple[float, float],
     b_vec.append(v_own[1])
 
     # top right (#2, right one)
-    p1 = np.array([cos(psi[0]), sin(psi[0])])
+    p1 = np.array([cos(theta1[0]), sin(theta1[0])])
     row = [0.0] * Star.NUM_VARS
     row[Star.VX_OWN] = p1[0]
     row[Star.VY_OWN] = p1[1]

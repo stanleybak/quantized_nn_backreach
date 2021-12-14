@@ -21,8 +21,7 @@ def qstate_cmd(alpha_prev, qstate, stdout=False):
     if stdout:
         print(f"qstate: {qstate}")
 
-    dx, dy, vxo, vyo, vxi, v_own, v_int = qstate
-    vyi = 0
+    dx, dy, theta1, theta2, v_own, v_int = qstate
 
     # dx is intruder - ownship
 
@@ -35,8 +34,8 @@ def qstate_cmd(alpha_prev, qstate, stdout=False):
         theta = atan2(dy, dx)
 
         # compute thetas from velocities?
-        theta1 = atan2(vyo, vxo)
-        theta2 = atan2(vyi, vxi)
+        #theta1 = atan2(vyo, vxo)
+        #theta2 = atan2(vyi, vxi)
         psi = theta2 - theta1
         #print(f"dvy = {dvy}, dvx = {dvx}, psi = {psi}")
 

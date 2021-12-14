@@ -9,23 +9,24 @@ import numpy as np
 from star import Star
 
 def quantize(x, delta=50):
-    """round to the nearest delta"""
+    """round to the nearest delta (offset by delta / 2)
 
-    return delta * round(x / delta)
+    for example using 50 will round anything between 0 and 50 to 25
+    """
 
-def make_qstar(orig_star, qstate, pos_q, vel_q):
+    return delta/2 + delta * round((x - delta/2) / delta)
+
+def make_qstar(orig_star, qstate, pos_q):
     """return a subset of the star within the given quantization box"""
 
     # note this can likely be sped up a lot by avoiding calls to lp using sampling and testing constraints
     # or finding closest point in the box and checking that first
     # probably eventually still need lp to disprove things though
 
-    dx, dy, vxo, vyo, vxi, _, _ = qstate
+    dx, dy  = qstate[:2]
 
     # copy the lp and add box constraints
     star = deepcopy(orig_star)
-
-    # note: constraints need to be added in the range, not the domain
 
     # dx constraints
     dims = star.a_mat.shape[1]
@@ -44,26 +45,5 @@ def make_qstar(orig_star, qstate, pos_q, vel_q):
 
     star.add_dense_row(vec, dy + pos_q/2)
     star.add_dense_row(-vec, -(dy - pos_q/2))
-
-    # vxo constraints
-    vec = zeros.copy()
-    vec[Star.VX_OWN] = 1
-
-    star.add_dense_row(vec, vxo + vel_q/2)
-    star.add_dense_row(-vec, -(vxo - vel_q/2))
-
-    # vyo constraints
-    vec = zeros.copy()
-    vec[Star.VY_OWN] = 1
-
-    star.add_dense_row(vec, vyo + vel_q/2)
-    star.add_dense_row(-vec, -(vyo - vel_q/2))
-
-    # vxi constraints
-    vec = zeros.copy()
-    vec[Star.VX_INT] = 1
-
-    star.add_dense_row(vec, vxi + vel_q/2)
-    star.add_dense_row(-vec, -(vxi - vel_q/2))
 
     return star
