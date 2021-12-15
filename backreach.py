@@ -30,9 +30,11 @@ class State():
 
     next_state_id = 0
 
-    def __init__(self, alpha_prev:int, q_theta1:float, q_v_own:float, q_v_int:float, star:Star):
+    def __init__(self, alpha_prev: int, q_theta1: float, q_v_own: float, q_v_int: float, star: Star):
         self.q_theta1 = q_theta1
         self.alpha_prev_list = [alpha_prev]
+        self.qinput_list = []
+        
         self.q_v_own = q_v_own
         self.q_v_int = q_v_int      
         
@@ -42,7 +44,15 @@ class State():
         self.assign_state_id()
 
     def __str__(self):
-        return f"State(id={self.state_id} with alpha_prev_list = {self.alpha_prev_list} and q_theta1 = {self.q_theta1})"
+        return f"State(id={self.state_id} with alpha_prev_list = {self.alpha_prev_list})"
+
+    def print_replay_init(self):
+        """print initialization states for replay"""
+
+        print(f"alpha_prev_list = {self.alpha_prev_list}")
+        print(f"q_theta1 = {self.q_theta1}")
+        print(f"q_v_int = {self.q_v_int}")
+        print(f"q_v_own = {self.q_v_own}")
 
     def assign_state_id(self):
         """assign and increment state_id"""
@@ -118,55 +128,9 @@ class State():
         rv.append((dy_min, dy_max))
 
         return rv
-        
-def main():
-    """main entry point"""
     
-    # todo: change this step to 100
-    delta_v = 200
 
-    alpha_prev = 4
-
-    x_own = (-500, -400)
-    y_own = (-100, 0)
-
-    #psi_own = (1*2*pi / 16, 2*2*pi / 16)
-
-    ep = 1e-6
-    
-    for theta1_own_min in np.arange(0, 2*pi - ep, State.theta1_quantum):
-        theta1_own = (theta1_own_min, theta1_own_min + State.theta1_quantum)
-        
-        for v_own_min in range(100, 1200, delta_v):
-            done = False
-
-            for v_int_min in range(0, 1200, delta_v):
-
-                v_own = (v_own_min, v_own_min + delta_v)
-                v_int = (v_int_min, v_int_min + delta_v)
-
-                res = backreach_single(alpha_prev, x_own, y_own, theta1_own, v_own, v_int)
-
-                assert res['counterexample'] is None
-                s = res['longest alpha_prev_list state']
-
-                if len(s.alpha_prev_list) > 2:
-                    print(f"\nlongest alpha_prev_list was {len(s.alpha_prev_list)}: {s}")
-                    domain_pt, range_pt = s.star.get_witness()
-                    print(f"end = np.{repr(domain_pt)}\nstart = np.{repr(range_pt)}")
-                    done = True
-                    break
-
-            if done:
-                break
-
-    print(f"q_v_int = {v_int[0] + delta_v / 2}")
-    print(f"q_v_own = {v_own[0] + delta_v / 2}")
-
-    if not done:
-        print("\nfinished enumeration")
-
-def backreach_single(init_alpha_prev, x_own, y_own, theta1_own, v_own, v_int):
+def backreach_single(init_alpha_prev, x_own, y_own, theta1_own, v_own, v_int, target_len=None):
     """run backreachability from a single symbolic state"""
 
     q_v_int = (v_int[0] + v_int[1]) / 2
@@ -182,7 +146,7 @@ def backreach_single(init_alpha_prev, x_own, y_own, theta1_own, v_own, v_int):
     #p.plot_star(init_s.star)
 
     work = [init_s]
-    colors = ['b', 'lime', 'r', 'g', 'magenta', 'cyan', 'pink']
+    #colors = ['b', 'lime', 'r', 'g', 'magenta', 'cyan', 'pink']
     popped = 0
 
     rv = {'counterexample': None, 'longest alpha_prev_list state': init_s}
@@ -193,8 +157,8 @@ def backreach_single(init_alpha_prev, x_own, y_own, theta1_own, v_own, v_int):
             print("break because of counterexample")
             break
 
-        if len(rv['longest alpha_prev_list state'].alpha_prev_list) > 2:
-            print("break because of alpha_prev_list len")
+        if target_len is not None and len(rv['longest alpha_prev_list state'].alpha_prev_list) >= target_len:
+            print(f"break because of alpha_prev_list len >= target({target_len})")
             break
         
         s = work.pop()
@@ -212,17 +176,17 @@ def backreach_single(init_alpha_prev, x_own, y_own, theta1_own, v_own, v_int):
             print(f"using alpha_prev network {alpha_prev}")
 
             all_correct = True
-            correct_qstars = []
+            correct_qstars_qinputs = []
 
             for qstate, qstar in q_list:
-                cmd = qstate_cmd(alpha_prev, qstate, stdout=False)
+                cmd, qinput = qstate_cmd(alpha_prev, qstate)
 
                 if cmd == s.alpha_prev_list[-1]:
-                    correct_qstars.append(qstar)
+                    correct_qstars_qinputs.append((qstar, qinput))
                 else:
                     all_correct = False
 
-            print(f"alpha_prev: {alpha_prev}, all_correct: {all_correct}, num_correct: {len(correct_qstars)}")
+            print(f"alpha_prev: {alpha_prev}, all_correct: {all_correct}, num_correct: {len(correct_qstars_qinputs)}")
 
             if all_correct:                
                 # if all correct, propagate the entire set without splitting
@@ -230,6 +194,9 @@ def backreach_single(init_alpha_prev, x_own, y_own, theta1_own, v_own, v_int):
                 next_s.assign_state_id()
                 next_s.alpha_prev_list.append(alpha_prev)
                 work.append(next_s)
+
+                qinputs = tuple(qi for _, qi in correct_qstars_qinputs)
+                next_s.qinput_list.append(qinputs)
 
                 print(f"appending to work, work len: {len(work)}")
 
@@ -246,12 +213,14 @@ def backreach_single(init_alpha_prev, x_own, y_own, theta1_own, v_own, v_int):
             else:
                 state_strs = []
                 
-                for qstar in correct_qstars:
+                for qstar, qinput in correct_qstars_qinputs:
                     next_s = deepcopy(s)
                     next_s.assign_state_id()
                     next_s.alpha_prev_list.append(alpha_prev)
                     next_s.star = qstar
                     work.append(next_s)
+
+                    next_s.qinput_list.append(qinput)
 
                     if next_s.alpha_prev_list[-2] == 0 and alpha_prev == 0:
                         # CoC network predicts CoC... valid start state!
@@ -266,7 +235,7 @@ def backreach_single(init_alpha_prev, x_own, y_own, theta1_own, v_own, v_int):
                     domain_pt, range_pt = next_s.star.get_witness()
                     print(f"end = np.{repr(domain_pt)}\nstart = np.{repr(range_pt)}")
 
-            if len(correct_qstars) == 0:
+            if len(correct_qstars_qinputs) == 0:
                 print(f"no predecessors of state {s}")
 
     #plt.tight_layout()
@@ -274,6 +243,111 @@ def backreach_single(init_alpha_prev, x_own, y_own, theta1_own, v_own, v_int):
     print(f"work len: {len(work)}")
     
     return rv
+
+def main():
+    """main entry point"""
+    
+    delta_v = 100
+
+    alpha_prev = 4
+
+    x_own = (-500, -400)
+    y_own = (-100, 0)
+
+    #psi_own = (1*2*pi / 16, 2*2*pi / 16)
+
+    ep = 1e-6
+    done = False
+    s = None
+    target_len = 20
+    
+    for theta1_own_min in np.arange(0, 2*pi - ep, State.theta1_quantum):
+        theta1_own = (theta1_own_min, theta1_own_min + State.theta1_quantum)
+        
+        for v_own_min in range(100, 1200, delta_v):
+
+            for v_int_min in range(0, 1200, delta_v):
+
+                v_own = (v_own_min, v_own_min + delta_v)
+                v_int = (v_int_min, v_int_min + delta_v)
+
+                res = backreach_single(alpha_prev, x_own, y_own, theta1_own, v_own, v_int, target_len=target_len)
+
+                assert res['counterexample'] is None
+                s = res['longest alpha_prev_list state']
+
+                if len(s.alpha_prev_list) >= target_len:
+                    done = True
+                    break
+
+            if done:
+                break
+
+        if done:
+            break
+
+    if s is not None:
+        print(f"\nlongest alpha_prev_list was {len(s.alpha_prev_list)}: {s}")
+                            
+        s.print_replay_init()
+
+        domain_pt, range_pt = s.star.get_witness()
+        print(f"end = np.{repr(domain_pt)}\nstart = np.{repr(range_pt)}")
+
+        print()
+        step = 0
+        for i in range(len(s.qinput_list) - 1, -1, -1):
+            step += 1
+            print(f"{step}. network {s.alpha_prev_list[i+1]} with qinput: {s.qinput_list[i]} " + \
+                  f"gave cmd {s.alpha_prev_list[i]}")
+
+        print()
+        alpha_prev = s.alpha_prev_list[-1]
+
+        pq = State.pos_quantum
+        dx = quantize(range_pt[Star.X_INT] - range_pt[Star.X_OWN], pq)
+        dy = quantize(0 - range_pt[Star.Y_OWN], pq)
+        q_theta2 = 0
+
+        print(f"qdx: {dx}, orig_dx: {range_pt[Star.X_INT] - range_pt[Star.X_OWN]}")
+        print(f"qdy: {dy}, orig dy: {-range_pt[Star.Y_OWN]}")
+        
+        qstate = (dx, dy, s.q_theta1, q_theta2, s.q_v_own, s.q_v_int)
+        print(f"first qstate: {qstate}")
+        
+        cmd, qinput = qstate_cmd(alpha_prev, qstate, stdout=True)
+        print(f"network {alpha_prev}, qinput: {qinput}, cmd: {cmd}")
+
+        print()
+        mat = get_time_elapse_mat(cmd, 1.0)
+        next_state6 = mat @ range_pt
+        print(f"expected next state6: {next_state6}")
+
+        dx = quantize(next_state6[Star.X_INT] - next_state6[Star.X_OWN], pq)
+        dy = quantize(0 - next_state6[Star.Y_OWN], pq)
+        q_theta2 = 0
+
+        print(f"qdx: {dx}, orig_dx: {next_state6[Star.X_INT] - next_state6[Star.X_OWN]}")
+        print(f"qdy: {dy}, orig dy: {-next_state6[Star.Y_OWN]}")
+
+        cmd_quantum_list = [0, 1, -1, 2, -2]
+        q_theta1 = s.q_theta1 + cmd_quantum_list[cmd] * State.theta1_quantum
+        print(f"q_theta1: {q_theta1}")
+
+        qstate = (dx, dy, q_theta1, q_theta2, s.q_v_own, s.q_v_int)
+        print(f"second qstate: {qstate}")
+        
+        cmd2, qinput = qstate_cmd(cmd, qstate, stdout=True)
+        print(f"network {cmd}, qinput: {qinput}, cmd: {cmd2}")
+
+        print("""~~~ HERE~ problem is that second qstate is not in the list under entry 2
+how about we add the quantized ranges corresponding to each qstate, and then check if it should be in either of those?
+Otherwise, how does the witness point get there?!?
+
+"""
+
+    if not done:
+        print("\nfinished enumeration")
 
 if __name__ == "__main__":
     main()

@@ -123,8 +123,8 @@ def state8_to_qstate5(state8, stdout=False):
     assert len(state8) == 8
 
     # quantization
-    pos_quantum = 200
-    vel_quantum = 200
+    pos_quantum = 100
+    vel_quantum = 100
 
     theta1_quantum = 0.02617993877991494 # 1.5 degrees
 
@@ -179,7 +179,7 @@ def state8_to_qstate5(state8, stdout=False):
         print(f"dy: {dy}")
         print(f"theta1: {theta1}")
         print(f"theta2: {theta2}")
-        print(f"q_v_own: {q_v_own}")
+        print(f"q_v_own: {q_v_own} (from {own_vel})")
         print(f"q_v_int: {q_v_int}")
 
     return np.array([rho, theta, psi, q_v_own, q_v_int])
@@ -499,10 +499,6 @@ class State:
 
             t += State.dt
 
-            if cur_dist_sq > prev_dist_sq:
-                #print(f"Distance was increasing at time {round(t, 2)}, stopping simulation. Min_dist: {round(prev_dist, 1)}ft")
-                break
-
             prev_dist_sq = cur_dist_sq
             
         self.min_dist = math.sqrt(prev_dist_sq)
@@ -521,7 +517,7 @@ class State:
         rho, theta, psi, v_own, v_int = state8_to_qstate5(self.state8, stdout=stdout)
 
         print(f"state8: {self.state8}")
-        print(f"qstate5: {rho, theta, psi, v_own, v_int}")
+        print(f"qinput: {rho, theta, psi, v_own, v_int}")
 
         # 0: rho, distance
         # 1: theta, angle to intruder relative to ownship heading
@@ -649,19 +645,19 @@ def plot(s, save_mp4=False):
 def main():
     'main entry point'
 
-    q_v_int = 450.0
-    q_v_own = 650.0
-    q_theta1 = 0.06544984694978735
-    q_theta2 = 0.0
-
-    end = np.array([-454.16666667,  -12.5       ,  645.64914551,   14.77919022,
-          0.        ,  404.16666667])
-    start = np.array([-1099.13400874,   -44.17163188,   643.99082274,    48.54960129,
-            -404.16666667,   404.16666667])
-
-    alpha_prev_list = [4, 4]
+    ###################
+    alpha_prev_list = [4, 4, 3, 4, 3, 4, 4, 4, 3, 4, 3, 4, 3, 4, 3, 3, 3, 3, 4, 2]
+    q_theta1 = 0.06544984694978737
+    q_v_int = 50.0
+    q_v_own = 150.0
+    end = np.array([-446.193377  ,  -92.13338354,  156.16201798,    3.96178837,
+              0.        ,   99.37704155])
+    start = np.array([-3405.87103172,    32.72023277,   155.74065938,    12.12924741,
+           -1888.16378947,    99.37704155])
+    ##################
 
     # intruder command list
+    q_theta2 = 0.0
     cmd_list = [0] * (len(alpha_prev_list) - 1)
 
     _, _, vx, vy, _, vxi = start
@@ -695,10 +691,17 @@ def main():
     s.command = alpha_prev_list[-1]
     
     s.simulate(cmd_list, stdout=True)
+    print("\nSimulation completed.")
+
+    expected_end = np.array([end[0], end[1], end[2], end[3], end[4], 0, end[5], 0])
+    print(f"expected end: {expected_end}")
+    print(f"actual end: {s.state8}")
+    assert np.allclose(expected_end, s.state8), "state mismatch"
 
     print(f"cmds: {s.commands}, alpha_prev_list: {alpha_prev_list}")
 
-    assert s.commands == list(reversed(alpha_prev_list[:-1]))
+    assert s.commands == list(reversed(alpha_prev_list[:-1])), "command mismatch"
+    print("everything matched!")
     
     # optional: do plot
     #plot(s, save_mp4=False)

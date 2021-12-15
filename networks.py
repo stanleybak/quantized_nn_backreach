@@ -4,6 +4,7 @@ Neural network interface for quantized backreach
 Stanley Bak, 12-2021
 """
 
+from typing import Tuple
 from functools import lru_cache
 
 import os
@@ -13,8 +14,11 @@ import numpy as np
 
 import onnxruntime as ort
 
-def qstate_cmd(alpha_prev, qstate, stdout=False):
-    """get the command at the given quantized state"""
+def qstate_cmd(alpha_prev, qstate, stdout=False) -> Tuple[int, Tuple[float, float, float, float, float]]:
+    """get the command at the given quantized state
+
+    returns cmd, qinput
+    """
 
     assert isinstance(alpha_prev, int) and 0 <= alpha_prev <= 4, f"alpha_prev was {alpha_prev}"
 
@@ -54,15 +58,17 @@ def qstate_cmd(alpha_prev, qstate, stdout=False):
         while psi > np.pi:
             psi -= 2 * np.pi
 
+        qinput = (rho, theta, psi, v_own, v_int)
+            
         if stdout:
-            print(f"qinputs: {rho, theta, psi, v_own, v_int}")
+            print(f"qinput: {qinput}")
 
-        i = np.array([rho, theta, psi, v_own, v_int])
+        i = np.array(qinput)
         net = get_network(alpha_prev)
         out = run_network(net, i)
         cmd = int(np.argmin(out))
 
-    return cmd
+    return cmd, qinput
 
 # TODO: check effect on runtime if LRU cache is used here
 # @lru_cache(maxsize=None)
