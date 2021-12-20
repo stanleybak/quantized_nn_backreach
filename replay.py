@@ -117,7 +117,7 @@ def quantize(x, delta=50):
 
     return delta/2 + delta * round((x - delta/2) / delta)
 
-def state8_to_qstate5(state8, stdout=False):
+def state8_to_qinput_qstate(state8, stdout=False):
     """compute rho, theta, psi from state7"""
 
     assert len(state8) == 8
@@ -182,7 +182,10 @@ def state8_to_qstate5(state8, stdout=False):
         print(f"q_v_own: {q_v_own} (from {own_vel})")
         print(f"q_v_int: {q_v_int}")
 
-    return np.array([rho, theta, psi, q_v_own, q_v_int])
+    qinput = np.array([rho, theta, psi, q_v_own, q_v_int])
+    qstate = (dx, dy, theta1, theta2, q_v_own, q_v_int)
+
+    return qinput, qstate
 
 def state7_to_state8(state7, v_own, v_int):
     """compute x,y, vx, vy, x2, y2, vx2, vy2 from state7"""
@@ -246,6 +249,8 @@ class State:
         self.vec_list = [] # state history
         self.commands = [] # commands history
         self.int_commands = [] # intruder command history
+
+        self.qinputs = []
 
         # used only if plotting
         self.artists_dict = {} # set when make_artists is called
@@ -514,7 +519,8 @@ class State:
     def update_command(self, stdout=False):
         'update command based on current state'''
 
-        rho, theta, psi, v_own, v_int = state8_to_qstate5(self.state8, stdout=stdout)
+        qinput, qstate = state8_to_qinput_qstate(self.state8, stdout=stdout)
+        rho, theta, psi, v_own, v_int = qinput
 
         print(f"state8: {self.state8}")
         print(f"qinput: {rho, theta, psi, v_own, v_int}")
@@ -549,6 +555,8 @@ class State:
 
             # repeat last command if no more commands
             self.u_list_index = min(self.u_list_index, len(self.u_list) - 1)
+
+        self.qinputs.append((last_command, self.state8, qstate, qinput, self.command))
 
 def plot(s, save_mp4=False):
     """plot a specific simulation"""
@@ -646,14 +654,15 @@ def main():
     'main entry point'
 
     ###################
-    alpha_prev_list = [4, 4, 3, 4, 3, 4, 4, 4, 3, 4, 3, 4, 3, 4, 3, 3, 3, 3, 4, 2]
-    q_theta1 = 0.06544984694978737
-    q_v_int = 50.0
+    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]
+    q_theta1 = 1.007927643026725
+    q_v_int = 150.0
     q_v_own = 150.0
-    end = np.array([-446.193377  ,  -92.13338354,  156.16201798,    3.96178837,
-              0.        ,   99.37704155])
-    start = np.array([-3405.87103172,    32.72023277,   155.74065938,    12.12924741,
-           -1888.16378947,    99.37704155])
+    end = np.array([-400.03421973,  -99.96578027,  142.6600315 ,    3.70145294,
+              0.        ,  199.96578027])
+    start = np.array([-2652.8903752 , -1399.93270955,    74.59392225,   121.6607254 ,
+           -3799.3498252 ,   199.96578027])
+
     ##################
 
     # intruder command list
@@ -693,15 +702,24 @@ def main():
     s.simulate(cmd_list, stdout=True)
     print("\nSimulation completed.")
 
+    for i, (net, state8, qstate, qinput, cmd_out) in enumerate(s.qinputs):
+        print(f"{i+1}. network {net} with qinput: {tuple(q for q in qinput)} -> {cmd_out}")
+        print(f"state: {tuple(x for x in state8)}")
+        print(f"qstate: {[x for x in qstate]}")
+
     expected_end = np.array([end[0], end[1], end[2], end[3], end[4], 0, end[5], 0])
     print(f"expected end: {expected_end}")
     print(f"actual end: {s.state8}")
-    assert np.allclose(expected_end, s.state8), "state mismatch"
 
     print(f"cmds: {s.commands}, alpha_prev_list: {alpha_prev_list}")
 
     assert s.commands == list(reversed(alpha_prev_list[:-1])), "command mismatch"
-    print("everything matched!")
+    print("commands matched!")
+
+    difference = np.linalg.norm(s.state8 - expected_end, ord=np.inf)
+    print(f"end state difference: {difference}")
+    assert difference < 1e-6, f"end state mismatch. difference was {difference}"
+    print("end states were close enough")
     
     # optional: do plot
     #plot(s, save_mp4=False)

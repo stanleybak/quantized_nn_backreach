@@ -60,22 +60,31 @@ class State():
         self.state_id = State.next_state_id
         State.next_state_id += 1
 
-    def backstep(self):
+    def backstep(self, forward=False, forward_alpha_prev=-1):
         """step backwards according to alpha_prev"""
 
-        cmd = self.alpha_prev_list[-1]
+        if forward:
+            cmd = forward_alpha_prev
+        else:
+            cmd = self.alpha_prev_list[-1]
 
-        mat = get_time_elapse_mat(cmd, -1.0)
+        assert 0 <= cmd <= 4
 
-        self.star.a_mat = self.star.a_mat @ mat
-        self.star.b_vec = self.star.b_vec @ mat
+        mat = get_time_elapse_mat(cmd, -1.0 if not forward else 1.0)
+
+        self.star.a_mat = mat @ self.star.a_mat
+        self.star.b_vec = mat @ self.star.b_vec
 
         # clear, weak left, weak right, strong left, strong right
         cmd_quantum_list = [0, 1, -1, 2, -2]
+        delta_q_theta = cmd_quantum_list[cmd] * State.theta1_quantum
 
-        self.q_theta1 -= cmd_quantum_list[cmd] * State.theta1_quantum
+        if forward:
+            self.q_theta1 += delta_q_theta
+        else:
+            self.q_theta1 -= delta_q_theta
 
-    def get_qstates_qstars(self) -> List[Tuple[Tuple[float, float, float, float, float, float], Star]]:
+    def get_qstates_qstars(self, stdout=False) -> List[Tuple[Tuple[float, float, float, float, float, float], Star]]:
         """get the discretized states used as inputs to the nn
 
         returns a list of quantized states: (dx, dy, theta1, theta2, q_v_own, q_v_int)
@@ -83,7 +92,7 @@ class State():
         """
 
         rv: List[Tuple[Tuple[float, float, float, float, float, float], Star]] = []
-        limits = self.get_discretized_ranges()
+        limits = self.get_discretized_ranges(stdout=stdout)
         tol = 1e-6
 
         pq = State.pos_quantum
@@ -103,7 +112,7 @@ class State():
 
         return rv
     
-    def get_discretized_ranges(self) -> List[Tuple[float, float]]:
+    def get_discretized_ranges(self, stdout=False) -> List[Tuple[float, float]]:
         """get the ranges for (dx, dy)"""
 
         rv = []
@@ -123,9 +132,21 @@ class State():
         #vec[Star.Y_INT] = 1 # Y_int is always 0
         vec[Star.Y_OWN] = -1
 
+        if stdout:
+            print(f"opt vec: {vec}")
+
+            pt = self.star.minimize_vec(vec)
+            print(f"min pt: {pt}, min val: {pt @ vec}")
+
+            pt = self.star.minimize_vec(-vec)
+            print(f"ax pt: {pt}, max val: {pt @ vec}")
+
         dy_min = self.star.minimize_vec(vec) @ vec
         dy_max = self.star.minimize_vec(-vec) @ vec
         rv.append((dy_min, dy_max))
+
+        if stdout:
+            print(f"dy range: {rv[-1]}")
 
         return rv
     
@@ -305,46 +326,57 @@ def main():
         alpha_prev = s.alpha_prev_list[-1]
 
         pq = State.pos_quantum
-        dx = quantize(range_pt[Star.X_INT] - range_pt[Star.X_OWN], pq)
-        dy = quantize(0 - range_pt[Star.Y_OWN], pq)
+        pt = range_pt.copy()
+        
+        q_theta1 = s.q_theta1
         q_theta2 = 0
 
-        print(f"qdx: {dx}, orig_dx: {range_pt[Star.X_INT] - range_pt[Star.X_OWN]}")
-        print(f"qdy: {dy}, orig dy: {-range_pt[Star.Y_OWN]}")
+        p = Plotter()
+        s_copy = deepcopy(s)
+
+        #star_temp = deepcopy(s.star)
+        #star_temp.a_mat = np.identity(6)
         
-        qstate = (dx, dy, s.q_theta1, q_theta2, s.q_v_own, s.q_v_int)
-        print(f"first qstate: {qstate}")
-        
-        cmd, qinput = qstate_cmd(alpha_prev, qstate, stdout=True)
-        print(f"network {alpha_prev}, qinput: {qinput}, cmd: {cmd}")
+        #star_temp.a_mat = np.identity(star_temp.dims)
+        #star_temp.b_vec = np.zeros(star_temp.dims)
 
-        print()
-        mat = get_time_elapse_mat(cmd, 1.0)
-        next_state6 = mat @ range_pt
-        print(f"expected next state6: {next_state6}")
+        #p.plot_star(star_temp)
 
-        dx = quantize(next_state6[Star.X_INT] - next_state6[Star.X_OWN], pq)
-        dy = quantize(0 - next_state6[Star.Y_OWN], pq)
-        q_theta2 = 0
+        #plt.show()
+        #print("debug exit")
+        #exit(1)
 
-        print(f"qdx: {dx}, orig_dx: {next_state6[Star.X_INT] - next_state6[Star.X_OWN]}")
-        print(f"qdy: {dy}, orig dy: {-next_state6[Star.Y_OWN]}")
+        p.plot_star(s.star)
 
-        cmd_quantum_list = [0, 1, -1, 2, -2]
-        q_theta1 = s.q_theta1 + cmd_quantum_list[cmd] * State.theta1_quantum
-        print(f"q_theta1: {q_theta1}")
+        for i in range(len(s.alpha_prev_list) - 1):
+            net = s.alpha_prev_list[-(i+1)]
+            expected_cmd = s.alpha_prev_list[-(i+2)]
 
-        qstate = (dx, dy, q_theta1, q_theta2, s.q_v_own, s.q_v_int)
-        print(f"second qstate: {qstate}")
-        
-        cmd2, qinput = qstate_cmd(cmd, qstate, stdout=True)
-        print(f"network {cmd}, qinput: {qinput}, cmd: {cmd2}")
+            dx = quantize(pt[Star.X_INT] - pt[Star.X_OWN], pq)
+            dy = quantize(0 - pt[Star.Y_OWN], pq)
 
-        print("""~~~ HERE~ problem is that second qstate is not in the list under entry 2
-how about we add the quantized ranges corresponding to each qstate, and then check if it should be in either of those?
-Otherwise, how does the witness point get there?!?
+            qstate = (dx, dy, q_theta1, q_theta2, s.q_v_own, s.q_v_int)
+            
+            cmd_out, qinput = qstate_cmd(net, qstate)
+            print(f"({i+1}). network {net} with qinput: {qinput} -> {cmd_out}")
+            print(f"state: {list(pt)}")
+            print(f"qstate: {qstate}")
 
-"""
+            s_copy.backstep(forward=True, forward_alpha_prev=cmd_out)
+            p.plot_star(s_copy.star)
+
+            assert cmd_out == expected_cmd, f"got cmd {cmd_out}, expected cmd {expected_cmd}"
+            mat = get_time_elapse_mat(cmd_out, 1.0)
+            pt = mat @ pt
+
+            cmd_quantum_list = [0, 1, -1, 2, -2]
+            delta_q_theta = cmd_quantum_list[cmd_out] * State.theta1_quantum
+            q_theta1 += delta_q_theta
+
+            if i == 5:
+                break
+
+        plt.show()
 
     if not done:
         print("\nfinished enumeration")

@@ -29,7 +29,6 @@ class Star:
     def __init__(self, box, constraints_a_mat=None, constraints_b_vec=None):
         """create star from a list of box constraints
         and inequality constrainta a_mat * x <= b_vec
-
         """
 
         names = ("x_o", "y_o", "vx_o", "vy_o", "x_i", "vx_i")
@@ -108,24 +107,64 @@ class Star:
         return self.hpoly.is_feasible()
 
     def get_witness(self):
-        """get a witness point of the star, trying to be close to the center"""
+        """get a witness point of the star, using the Chebeshev center"""
 
         assert self.hpoly.is_feasible()
-        dims = self.hpoly.get_num_cols()
-        lp_vec = np.zeros(dims)
 
-        domain_pt = lp_vec.copy()
-        num_pts = 2*dims
+        constraints = self.hpoly.get_constraints_csr().toarray()        
+        col_bounds = self.hpoly.get_col_bounds()
+        rhs_list = self.hpoly.get_rhs() # this fails if exist constriants other than '<='
 
-        for dim in range(dims):
-            lp_vec[dim] = 1.0
-            domain_pt += self.hpoly.minimize(lp_vec) / num_pts
+        lpi = LpInstance()
 
-            lp_vec[dim] = -1.0
-            domain_pt += self.hpoly.minimize(lp_vec) / num_pts
-
-            lp_vec[dim] = 0.0
+        lpi.add_cols(self.hpoly.names) # note: added as free (unbounded) variables
         
+        #for name, lb, ub in zip(self.hpoly.names, lbs, ubs):
+        #    lpi.add_double_bounded_cols([name], lb, ub)
+            
+        lpi.add_positive_cols(['r']) # radius of circle
+        cols = lpi.get_num_cols()
+
+        for row, rhs in zip(constraints, rhs_list):
+            norm = np.linalg.norm(row)
+
+            v = np.zeros(cols)
+            v[:-1] = row
+            v[-1] = norm
+
+            lpi.add_dense_row(v, rhs)
+
+        # also add radius constraints related to each of the lower and upper bounds
+        for i, (lb, ub) in enumerate(col_bounds):
+            # example: x in [50, 100]
+
+            if ub != np.inf:
+                v = np.zeros(cols)
+                v[i] = 1
+
+                if abs(lb - ub) > 1e-6:
+                    v[-1] = 1
+
+                # x + r <= 100
+                lpi.add_dense_row(v, ub)
+
+            if lb != -np.inf:
+                v = np.zeros(cols)
+                v[i] = -1
+
+                if abs(lb - ub) > 1e-6:
+                    v[-1] = 1
+
+                # x - r >= 50
+                # -x + r <= -50
+                lpi.add_dense_row(v, -lb)
+
+        max_r = np.zeros(cols)
+        max_r[-1] = -1
+
+        res = lpi.minimize(max_r)
+        
+        domain_pt = res[:-1]
         range_pt = self.a_mat @ domain_pt + self.b_vec
 
         return domain_pt, range_pt
