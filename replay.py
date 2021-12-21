@@ -654,14 +654,16 @@ def main():
     'main entry point'
 
     ###################
-    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]
-    q_theta1 = 1.007927643026725
-    q_v_int = 150.0
+    alpha_prev_list = [3, 3, 3, 3, 1]
+    q_theta1 = -0.19634954084936204
+    q_v_int = 450.0
     q_v_own = 150.0
-    end = np.array([-400.03421973,  -99.96578027,  142.6600315 ,    3.70145294,
-              0.        ,  199.96578027])
-    start = np.array([-2652.8903752 , -1399.93270955,    74.59392225,   121.6607254 ,
-           -3799.3498252 ,   199.96578027])
+    # chebyshev center radius: 1.521808161858936
+    end = np.array([-426.19673962,   -1.52180816,  198.47819184,    1.52180816,
+              0.        ,  401.52180816])
+    start = np.array([-1214.95319857,    75.27025425,   194.45736885,   -39.77738345,
+           -1606.08723265,   401.52180816])
+
 
     ##################
 
@@ -718,7 +720,7 @@ def main():
 
     difference = np.linalg.norm(s.state8 - expected_end, ord=np.inf)
     print(f"end state difference: {difference}")
-    assert difference < 1e-6, f"end state mismatch. difference was {difference}"
+    assert difference < 1e-4, f"end state mismatch. difference was {difference}"
     print("end states were close enough")
     
     # optional: do plot

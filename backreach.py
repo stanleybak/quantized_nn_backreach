@@ -2,10 +2,11 @@
 Backreach using quantized inputs
 '''
 
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
+import time
 from copy import deepcopy
-from math import pi, atan2, sin, cos
+from math import pi, floor, ceil
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,7 +15,12 @@ from star import Star
 from plotting import Plotter
 from dubins import init_to_constraints, get_time_elapse_mat
 from util import quantize, make_qstar
-from networks import qstate_cmd
+from networks import get_cmd
+
+from timerutil import timed, Timers
+from settings import pos_quantum, vel_quantum, theta1_quantum
+
+counter = 0
 
 class State():
     """state of backreach container
@@ -23,20 +29,26 @@ class State():
     alpha_prev (int) - previous command 
     """
 
-    nn_update_rate = 1.0
+    debug = False
 
-    pos_quantum = 100
-    theta1_quantum = 2*pi / (360 / 1.5) # every 1.5 degrees
+    nn_update_rate = 1.0
 
     next_state_id = 0
 
-    def __init__(self, alpha_prev: int, q_theta1: float, q_v_own: float, q_v_int: float, star: Star):
-        self.q_theta1 = q_theta1
-        self.alpha_prev_list = [alpha_prev]
-        self.qinput_list = []
+    def __init__(self, alpha_prev: int, qtheta1: int, qv_own: int, qv_int: int, \
+                 star: Star):
+
+        assert isinstance(qtheta1, int)
+        self.qtheta1 = qtheta1
+        self.qv_own = qv_own
+        self.qv_int = qv_int      
         
-        self.q_v_own = q_v_own
-        self.q_v_int = q_v_int      
+        self.alpha_prev_list = [alpha_prev]
+
+        if State.debug:
+            self.qinput_star_list = []
+        else:
+            self.qinput_star_list = None
         
         self.star = star
         
@@ -46,13 +58,102 @@ class State():
     def __str__(self):
         return f"State(id={self.state_id} with alpha_prev_list = {self.alpha_prev_list})"
 
+    @timed
+    def copy(self, new_star=None):
+        """return a deep copy of self"""
+
+        if new_star is not None:
+            self_star = self.star
+            self.star = None
+
+        rv = deepcopy(self)
+        rv.assign_state_id()
+
+        if new_star is not None:
+            rv.star = new_star
+            
+            # restore self.star
+            self.star = self_star
+
+        return rv
+
     def print_replay_init(self):
         """print initialization states for replay"""
 
         print(f"alpha_prev_list = {self.alpha_prev_list}")
-        print(f"q_theta1 = {self.q_theta1}")
-        print(f"q_v_int = {self.q_v_int}")
-        print(f"q_v_own = {self.q_v_own}")
+        print(f"qtheta1 = {self.qtheta1}")
+        print(f"qv_own = {self.qv_own}")
+        print(f"qv_int = {self.qv_int}")
+
+    def print_replay_witness(self, plot=False):
+        """print a step-by-step replay for the witness point"""
+
+        s = self
+        
+        domain_pt, range_pt = s.star.get_witness(print_radius=True)
+        print(f"end = np.{repr(domain_pt)}\nstart = np.{repr(range_pt)}")
+
+        p = Plotter()
+
+        print()
+
+        if State.debug:
+            step = 0
+            for i in range(len(s.qinput_star_list) - 1, -1, -1):
+                step += 1
+                qinput, star = s.qinput_star_list[i]
+
+                print(f"{step}. network {s.alpha_prev_list[i+1]} with qinput: {qinput} " + \
+                      f"gave cmd {s.alpha_prev_list[i]}")
+
+                p.plot_star(star, color='magenta')
+
+            print()
+
+        pq = pos_quantum
+        pt = range_pt.copy()
+        
+        q_theta1 = s.qtheta1
+        q_theta2 = 0
+
+        s_copy = deepcopy(s)
+
+        p.plot_star(s.star, color='r')
+        mismatch = False
+
+        for i in range(len(s.alpha_prev_list) - 1):
+            net = s.alpha_prev_list[-(i+1)]
+            expected_cmd = s.alpha_prev_list[-(i+2)]
+
+            dx = quantize(pt[Star.X_INT] - pt[Star.X_OWN], pq)
+            dy = quantize(0 - pt[Star.Y_OWN], pq)
+
+            qstate = (dx, dy, q_theta1, s.qv_own, s.qv_int)
+            
+            cmd_out = get_cmd(net, *qstate)
+            print(f"({i+1}). network {net} -> {cmd_out}")
+            print(f"state: {list(pt)}")
+            print(f"qstate: {qstate}")
+
+            if cmd_out != expected_cmd:
+                print(f"Mismatch at step {i+1}. got cmd {cmd_out}, expected cmd {expected_cmd}")
+                mismatch = True
+                break
+
+            s_copy.backstep(forward=True, forward_alpha_prev=cmd_out)
+            p.plot_star(s_copy.star)
+                
+            mat = get_time_elapse_mat(cmd_out, 1.0)
+            pt = mat @ pt
+
+            cmd_quantum_list = [0, 1, -1, 2, -2]
+            delta_q_theta = cmd_quantum_list[cmd_out] * theta1_quantum
+            q_theta1 += delta_q_theta
+
+        if mismatch or plot:
+            plt.show()
+        else:
+            print("witness commands all matched expectation")
 
     def assign_state_id(self):
         """assign and increment state_id"""
@@ -60,6 +161,7 @@ class State():
         self.state_id = State.next_state_id
         State.next_state_id += 1
 
+    @timed
     def backstep(self, forward=False, forward_alpha_prev=-1):
         """step backwards according to alpha_prev"""
 
@@ -72,96 +174,313 @@ class State():
 
         mat = get_time_elapse_mat(cmd, -1.0 if not forward else 1.0)
 
+        #if forward:
+        #    print(f"condition number of transform mat: {np.linalg.cond(mat)}")
+        #    print(f"condition number of a_mat: {np.linalg.cond(self.star.a_mat)}")
+
         self.star.a_mat = mat @ self.star.a_mat
         self.star.b_vec = mat @ self.star.b_vec
 
         # clear, weak left, weak right, strong left, strong right
         cmd_quantum_list = [0, 1, -1, 2, -2]
-        delta_q_theta = cmd_quantum_list[cmd] * State.theta1_quantum
+        delta_q_theta = cmd_quantum_list[cmd]
+        # note: this assume theta1 quantum is 1.5 degrees
 
         if forward:
-            self.q_theta1 += delta_q_theta
+            self.qtheta1 += delta_q_theta
         else:
-            self.q_theta1 -= delta_q_theta
+            self.qtheta1 -= delta_q_theta
 
-    def get_qstates_qstars(self, stdout=False) -> List[Tuple[Tuple[float, float, float, float, float, float], Star]]:
-        """get the discretized states used as inputs to the nn
-
-        returns a list of quantized states: (dx, dy, theta1, theta2, q_v_own, q_v_int)
-            with their associated feasible Star
+    @timed
+    def get_predecessors(self, plotter=None, stdout=False):
+        """get the valid predecessors of this star
         """
 
-        rv: List[Tuple[Tuple[float, float, float, float, float, float], Star]] = []
-        limits = self.get_discretized_ranges(stdout=stdout)
-        tol = 1e-6
+        global counter
 
-        pq = State.pos_quantum
+        # compute previous state
+        self.backstep()
 
-        for dx in np.arange(quantize(limits[0][0], pq), quantize(limits[0][1], pq) + tol, pq):
-            for dy in np.arange(quantize(limits[1][0], pq), quantize(limits[1][1], pq) + tol, pq):
-                q_theta2 = 0 # intruder is always moving right
+        if plotter is not None:
+            plotter.plot_star(self.star)
+
+        rv: List[State] = []
+        dx_qrange, dy_qrange = self.get_dx_dy_qrange(stdout=stdout)
+
+        # pass 1: do all quantized states classify the same (correct way)?
+        # alternatively: are they all incorrect?
+
+        # pass 2: if partial correct / incorrect, are any of the incorrect ones feasible?
+        # if so, we may need to split the set
+
+        constants = (self.qtheta1, self.qv_own, self.qv_int)
+
+        for prev_cmd in range(5):
+            qstate_to_cmd: Dict[Tuple[int, int], int] = {}
+            all_right = True
+            all_wrong = True
+            
+            for qdx in range(dx_qrange[0], dx_qrange[1] + 1):
+                for qdy in range(dy_qrange[0], dy_qrange[1] + 1):
+                    qstate = (qdx, qdy)
+
+                    out_cmd = get_cmd(prev_cmd, *qstate, *constants)
+
+                    qstate_to_cmd[qstate] = out_cmd
+
+                    if out_cmd == self.alpha_prev_list[-1]:
+                        # command is correct
+                        all_wrong = False
+                    else:
+                        # command is wrong
+                        all_right = False
+
+            if all_wrong:
+                continue
+            
+            # for the current prev_command, was either all correct or all wrong?
+            if all_right:
+                prev_s = self.copy()
+                prev_s.alpha_prev_list.append(prev_cmd)
+                rv.append(prev_s)
+                continue
+
+            # still have a chance at all correct: if incorrect state are infeasible
+            all_incorrect_infeasible = True
+            
+            for qdx in range(dx_qrange[0], dx_qrange[1] + 1):
+                for qdy in range(dy_qrange[0], dy_qrange[1] + 1):
+                    qstate = (qdx, qdy)
+                    out_cmd = qstate_to_cmd.get(qstate)
+
+                    if out_cmd != self.alpha_prev_list[-1]:
+                        # if incorrect commands
+                        star = make_qstar(self.star, qstate)
+
+                        if star.is_feasible():
+                            all_incorrect_infeasible = False
+                            break
+
+                if not all_incorrect_infeasible:
+                    break
+
+            if all_incorrect_infeasible:
+                prev_s = self.copy()
+                prev_s.alpha_prev_list.append(prev_cmd)
+                rv.append(prev_s)
+                continue
+
+            # ok, do splitting if command is correct
+            correct_qstates = []
+            incorrect_qstates = []
+            
+            for qdx in range(dx_qrange[0], dx_qrange[1] + 1):
+                for qdy in range(dy_qrange[0], dy_qrange[1] + 1):
+                    qstate = (qdx, qdy)
+                    star = make_qstar(self.star, qstate)
+
+                    if star.is_feasible():
+                        out_cmd = qstate_to_cmd.get(qstate)
+
+                        if out_cmd == self.alpha_prev_list[-1]:
+                            correct_qstates.append(qstate)
+                            
+                            prev_s = self.copy(star)
+                            prev_s.alpha_prev_list.append(prev_cmd)
+                            rv.append(prev_s)
+                        else:
+                            incorrect_qstates.append(qstate)
+
+            # split along incorrect qstates
+            # each element is a_mat, rhs_list, states
+            groups: List[Tuple[List[List[float]], List[float], List[Tuple[int, int]]]] = [([], [], correct_qstates)]
+
+            # dx = x_int - x_own
+            dx_row = [0.0] * Star.NUM_VARS
+            dx_row[Star.X_INT] = 1
+            dx_row[Star.X_OWN] = -1
+
+            neg_dx_row = [-x for x in dx_row]
+
+            # dy = y_int - y_own
+            dy_row = [0.0] * Star.NUM_VARS
+            #dy_row[Star.Y_INT] = 1 # always 0
+            dy_row[Star.Y_OWN] = -1
+
+            neg_dy_row = [-y for y in dy_row]
+
+            for ix, iy in incorrect_qstates:
+                new_groups: List[Tuple[List[List[float]], List[float], List[Tuple[int, int]]]] = []
+
+                for mat, rhs, qstates in groups:
+                    case1 = []
+                    case2 = []
+                    case3 = []
+                    case4 = []
+
+                    for qstate in qstates:
+                        x, y = qstate
+
+                        if x < ix:
+                            case1.append(qstate)
+                        elif x > ix:
+                            case2.append(qstate)
+                        elif x == ix and y > iy:
+                            case3.append(qstate)
+                        else:
+                            assert x == ix and y < iy
+                            case4.append(qstate)
+
+                    if case1:
+                        new_mat = mat.copy()
+                        new_rhs = rhs.copy()
+
+                        # add x < ix constraint
+                        new_mat.append(dx_row)
+                        new_rhs.append(ix * pos_quantum)
+
+                        tup = (new_mat, new_rhs, case1)
+                        new_groups.append(tup)
+
+                    if case2:
+                        new_mat = mat.copy()
+                        new_rhs = rhs.copy()
+
+                        # add x > ix constraint
+                        new_mat.append(neg_dx_row)
+                        new_rhs.append(-((ix+1) * pos_quantum))
+
+                        tup = (new_mat, new_rhs, case2)
+                        new_groups.append(tup)
+
+                    if case3:
+                        new_mat = mat.copy()
+                        new_rhs = rhs.copy()
+
+                        # add x == ix and y > iy
+                        new_mat.append(dx_row)
+                        new_rhs.append((ix + 1) * pos_quantum)
+
+                        new_mat.append(neg_dx_row)
+                        new_rhs.append(-ix * pos_quantum)
+
+                        new_mat.append(neg_dy_row)
+                        new_rhs.append(-((iy + 1) * pos_quantum))
+
+                        tup = (new_mat, new_rhs, case3)
+                        new_groups.append(tup)
+
+                    if case4:
+                        new_mat = mat.copy()
+                        new_rhs = rhs.copy()
+
+                        # add x == ix and y < iy
+                        new_mat.append(dx_row)
+                        new_rhs.append((ix + 1) * pos_quantum)
+
+                        new_mat.append(neg_dx_row)
+                        new_rhs.append(-ix * pos_quantum)
+
+                        new_mat.append(dy_row)
+                        new_rhs.append(iy * pos_quantum)
+
+                        tup = (new_mat, new_rhs, case4)
+                        new_groups.append(tup)
+
+                # assign for next iteration
+                groups = new_groups
+
+            #print(f"correct ({len(correct_qstates)}): {correct_qstates}")
+            #print(f"incorrect ({len(incorrect_qstates)}): {incorrect_qstates}")
+            #print(f"num groups: {len(groups)}")
+
+            for mat, rhs, _ in groups:
+                star = deepcopy(self.star)
+                for row, val in zip(mat, rhs):
+                    star.add_dense_row(row, val)
+
+                # star should be feasible?!?
+                assert star.is_feasible()
+                prev_s = self.copy(star)
+
+                prev_s.alpha_prev_list.append(prev_cmd)
+                rv.append(prev_s)
+
+            counter += 1
+            
+            if counter >= np.inf:
+                p = Plotter()
+                p.plot_star(self.star, 'k')
+
+                for qdx in range(dx_qrange[0], dx_qrange[1] + 1):
+                    for qdy in range(dy_qrange[0], dy_qrange[1] + 1):
+                        qstate = (qdx, qdy)
+                        star = make_qstar(self.star, qstate)
+
+                        if star.is_feasible():
+                            out_cmd = qstate_to_cmd.get(qstate)
+
+                            if out_cmd != self.alpha_prev_list[-1]:
+                                p.plot_star(star, 'r', zorder=2)
+
+                for i, (mat, rhs, _) in enumerate(groups):
+                    star = deepcopy(self.star)
+                    for row, val in zip(mat, rhs):
+                        star.add_dense_row(row, val)
+
+                    # star should be feasible?!?
+                    assert star.is_feasible()
+
+                    color = ['g', 'b'][i % 2]
+                    p.plot_star(star, color, zorder=2)
                 
-                qstate = (dx, dy, self.q_theta1, q_theta2, self.q_v_own, self.q_v_int)
-
-                qstar = make_qstar(self.star, qstate, pq)
-
-                if qstar.is_feasible():
-                    rv.append((qstate, qstar))
-
-        assert rv, "quantized boxes was empty?"
-
+                plt.show()
+                exit(1)
+            
         return rv
-    
-    def get_discretized_ranges(self, stdout=False) -> List[Tuple[float, float]]:
-        """get the ranges for (dx, dy)"""
 
-        rv = []
+    @timed
+    def get_dx_dy_qrange(self, stdout=False) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+        """get the quantized range for (dx, dy)"""
 
-        zeros = np.zeros(Star.NUM_VARS)
-        vec = zeros.copy()
+        vec = np.zeros(Star.NUM_VARS)
 
         # dx = x_int - x_own
         vec[Star.X_INT] = 1
         vec[Star.X_OWN] = -1
         dx_min = self.star.minimize_vec(vec) @ vec
         dx_max = self.star.minimize_vec(-vec) @ vec
-        rv.append((dx_min, dx_max))
+
+        qdx_min = floor(dx_min / pos_quantum)
+        qdx_max = ceil(dx_max / pos_quantum)
+        dx_qrange = (qdx_min, qdx_max)
 
         # dy = y_int - y_own
-        vec = zeros.copy()
+        vec = np.zeros(Star.NUM_VARS)
         #vec[Star.Y_INT] = 1 # Y_int is always 0
         vec[Star.Y_OWN] = -1
 
-        if stdout:
-            print(f"opt vec: {vec}")
-
-            pt = self.star.minimize_vec(vec)
-            print(f"min pt: {pt}, min val: {pt @ vec}")
-
-            pt = self.star.minimize_vec(-vec)
-            print(f"ax pt: {pt}, max val: {pt @ vec}")
-
         dy_min = self.star.minimize_vec(vec) @ vec
         dy_max = self.star.minimize_vec(-vec) @ vec
-        rv.append((dy_min, dy_max))
+        
+        qdy_min = floor(dy_min / pos_quantum)
+        qdy_max = ceil(dy_max / pos_quantum)
+        dy_qrange = (qdy_min, qdy_max)
 
-        if stdout:
-            print(f"dy range: {rv[-1]}")
+        return dx_qrange, dy_qrange
 
-        return rv
-    
-
-def backreach_single(init_alpha_prev, x_own, y_own, theta1_own, v_own, v_int, target_len=None):
+def backreach_single(init_alpha_prev: int, x_own: Tuple[int, int], y_own: Tuple[int, int],
+                     theta1: int, v_own: int, v_int: int, target_len=None, plot=False):
     """run backreachability from a single symbolic state"""
 
-    q_v_int = (v_int[0] + v_int[1]) / 2
-    q_v_own = (v_own[0] + v_own[1]) / 2
-    q_theta1 = (theta1_own[0] + theta1_own[1]) / 2
+    #q_v_int = (v_int[0] + v_int[1]) / 2
+    #q_v_own = (v_own[0] + v_own[1]) / 2
+    #q_theta1 = (theta1_own[0] + theta1_own[1]) / 2
 
-    box, a_mat, b_vec = init_to_constraints(v_own, v_int, x_own, y_own, theta1_own)
+    box, a_mat, b_vec = init_to_constraints(x_own, y_own, v_own, v_int, theta1)
 
     init_star = Star(box, a_mat, b_vec)
-    init_s = State(init_alpha_prev, q_theta1, q_v_own, q_v_int, init_star)
+    init_s = State(init_alpha_prev, theta1, v_own, v_int, init_star)
 
     #p = Plotter()
     #p.plot_star(init_s.star)
@@ -171,6 +490,13 @@ def backreach_single(init_alpha_prev, x_own, y_own, theta1_own, v_own, v_int, ta
     popped = 0
 
     rv = {'counterexample': None, 'longest alpha_prev_list state': init_s}
+    deadends = set()
+
+    if plot:
+        plotter = Plotter()
+        plotter.plot_star(init_s.star, 'r')
+    else:
+        plotter = None
 
     while work:
 
@@ -183,121 +509,71 @@ def backreach_single(init_alpha_prev, x_own, y_own, theta1_own, v_own, v_int, ta
             break
         
         s = work.pop()
-        
-        # compute previous state
-        s.backstep()
-        #p.plot_star(s.star, colors[popped % len(colors)])
+        #print(f"{popped}: {s.alpha_prev_list}")
         popped += 1
 
-        q_list = s.get_qstates_qstars()
-        print(f"------- popped {popped} -----------")
-        print(f"popped state {s} num quantized states: {len(q_list)}")
+        predecessors = s.get_predecessors(plotter=plotter)
 
-        for alpha_prev in range(5):
-            print(f"using alpha_prev network {alpha_prev}")
+        for p in predecessors:
+            work.append(p)
+            
+            if p.alpha_prev_list[-2] == 0 and p.alpha_prev_list[-1] == 0:
+                rv['counterexample'] = deepcopy(p)
 
-            all_correct = True
-            correct_qstars_qinputs = []
+            if len(p.alpha_prev_list) > len(rv['longest alpha_prev_list state'].alpha_prev_list):
+                rv['longest alpha_prev_list state'] = deepcopy(p)
 
-            for qstate, qstar in q_list:
-                cmd, qinput = qstate_cmd(alpha_prev, qstate)
+        if not predecessors:
+            deadends.add(tuple(s.alpha_prev_list))
 
-                if cmd == s.alpha_prev_list[-1]:
-                    correct_qstars_qinputs.append((qstar, qinput))
-                else:
-                    all_correct = False
+    print(f"num popped: {popped}")
+    print(f"unique paths: {len(deadends)}")
 
-            print(f"alpha_prev: {alpha_prev}, all_correct: {all_correct}, num_correct: {len(correct_qstars_qinputs)}")
+    #for i, path in enumerate(deadends):
+    #    print(f"{i+1}: {path}")
 
-            if all_correct:                
-                # if all correct, propagate the entire set without splitting
-                next_s = deepcopy(s)
-                next_s.assign_state_id()
-                next_s.alpha_prev_list.append(alpha_prev)
-                work.append(next_s)
-
-                qinputs = tuple(qi for _, qi in correct_qstars_qinputs)
-                next_s.qinput_list.append(qinputs)
-
-                print(f"appending to work, work len: {len(work)}")
-
-                if next_s.alpha_prev_list[-2] == 0 and alpha_prev == 0:
-                    # CoC network predicts CoC... valid start state!
-                    rv['counterexample'] = next_s
-
-                if len(next_s.alpha_prev_list) > len(rv['longest alpha_prev_list state'].alpha_prev_list):
-                    rv['longest alpha_prev_list state'] = next_s
-
-                print(f"details of predecessor state {next_s}")
-                domain_pt, range_pt = next_s.star.get_witness()
-                print(f"end = np.{repr(domain_pt)}\nstart = np.{repr(range_pt)}")
-            else:
-                state_strs = []
-                
-                for qstar, qinput in correct_qstars_qinputs:
-                    next_s = deepcopy(s)
-                    next_s.assign_state_id()
-                    next_s.alpha_prev_list.append(alpha_prev)
-                    next_s.star = qstar
-                    work.append(next_s)
-
-                    next_s.qinput_list.append(qinput)
-
-                    if next_s.alpha_prev_list[-2] == 0 and alpha_prev == 0:
-                        # CoC network predicts CoC... valid start state!
-                        rv['counterexample'] = next_s
-
-                    if len(next_s.alpha_prev_list) > len(rv['longest alpha_prev_list state'].alpha_prev_list):
-                        rv['longest alpha_prev_list state'] = next_s
-
-                    state_strs.append(str(next_s))
-
-                    print(f"details of predecessor state {next_s}")
-                    domain_pt, range_pt = next_s.star.get_witness()
-                    print(f"end = np.{repr(domain_pt)}\nstart = np.{repr(range_pt)}")
-
-            if len(correct_qstars_qinputs) == 0:
-                print(f"no predecessors of state {s}")
-
-    #plt.tight_layout()
-    #plt.show()
-    print(f"work len: {len(work)}")
-    
     return rv
 
-def main():
-    """main entry point"""
+def run_all():
+    """loop over all cases"""
     
-    delta_v = 100
-
     alpha_prev = 4
 
-    x_own = (-500, -400)
-    y_own = (-100, 0)
+    x_own = (round(-500 / pos_quantum), round(-400 / pos_quantum))
+    y_own = (round(-100 / pos_quantum), round(0 / pos_quantum))
 
-    #psi_own = (1*2*pi / 16, 2*2*pi / 16)
-
-    ep = 1e-6
     done = False
     s = None
-    target_len = 20
+    target_len = 30 #None
+
+    max_qtheta1 = round(2*pi / theta1_quantum)
     
-    for theta1_own_min in np.arange(0, 2*pi - ep, State.theta1_quantum):
-        theta1_own = (theta1_own_min, theta1_own_min + State.theta1_quantum)
+    for qtheta1 in range(0, max_qtheta1):
         
-        for v_own_min in range(100, 1200, delta_v):
+        for q_vown in range(round(100/vel_quantum), round(1200/vel_quantum)):
+        
+            print(f"\n{round(qtheta1/max_qtheta1, 2)}%-{q_vown*vel_quantum}/1200:", end='')
 
-            for v_int_min in range(0, 1200, delta_v):
+            for q_vint in range(0, round(1200/vel_quantum)):
+                print(".", flush=True, end='')
 
-                v_own = (v_own_min, v_own_min + delta_v)
-                v_int = (v_int_min, v_int_min + delta_v)
+                start = time.perf_counter()
+                res = backreach_single(alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint, target_len=target_len)
+                diff = time.perf_counter() - start
 
-                res = backreach_single(alpha_prev, x_own, y_own, theta1_own, v_own, v_int, target_len=target_len)
+                if diff > 1.0:
+                    print(f"\nlong runtime ({round(diff, 2)}) for:\nalpha_prev={alpha_prev}\nx_own={x_own}\n" + \
+                          f"y_own={y_own}\nqtheta1={qtheta1}\nq_vown={q_vown}\nq_vint={q_vint}")
 
-                assert res['counterexample'] is None
-                s = res['longest alpha_prev_list state']
+                if len(res['longest alpha_prev_list state'].alpha_prev_list) >= target_len:
+                    print("found target len")
+                    s = res['longest alpha_prev_list state']
+                    done = True
+                    break
 
-                if len(s.alpha_prev_list) >= target_len:
+                if res['counterexample'] is not None:
+                    print("!!!!! counterexample!!!!")
+                    s = res['counterexample']
                     done = True
                     break
 
@@ -308,78 +584,41 @@ def main():
             break
 
     if s is not None:
-        print(f"\nlongest alpha_prev_list was {len(s.alpha_prev_list)}: {s}")
+        print(f"longest alpha_prev_list was {len(s.alpha_prev_list)}: {s}\n")
                             
         s.print_replay_init()
 
-        domain_pt, range_pt = s.star.get_witness()
-        print(f"end = np.{repr(domain_pt)}\nstart = np.{repr(range_pt)}")
-
-        print()
-        step = 0
-        for i in range(len(s.qinput_list) - 1, -1, -1):
-            step += 1
-            print(f"{step}. network {s.alpha_prev_list[i+1]} with qinput: {s.qinput_list[i]} " + \
-                  f"gave cmd {s.alpha_prev_list[i]}")
-
-        print()
-        alpha_prev = s.alpha_prev_list[-1]
-
-        pq = State.pos_quantum
-        pt = range_pt.copy()
-        
-        q_theta1 = s.q_theta1
-        q_theta2 = 0
-
-        p = Plotter()
-        s_copy = deepcopy(s)
-
-        #star_temp = deepcopy(s.star)
-        #star_temp.a_mat = np.identity(6)
-        
-        #star_temp.a_mat = np.identity(star_temp.dims)
-        #star_temp.b_vec = np.zeros(star_temp.dims)
-
-        #p.plot_star(star_temp)
-
-        #plt.show()
-        #print("debug exit")
-        #exit(1)
-
-        p.plot_star(s.star)
-
-        for i in range(len(s.alpha_prev_list) - 1):
-            net = s.alpha_prev_list[-(i+1)]
-            expected_cmd = s.alpha_prev_list[-(i+2)]
-
-            dx = quantize(pt[Star.X_INT] - pt[Star.X_OWN], pq)
-            dy = quantize(0 - pt[Star.Y_OWN], pq)
-
-            qstate = (dx, dy, q_theta1, q_theta2, s.q_v_own, s.q_v_int)
-            
-            cmd_out, qinput = qstate_cmd(net, qstate)
-            print(f"({i+1}). network {net} with qinput: {qinput} -> {cmd_out}")
-            print(f"state: {list(pt)}")
-            print(f"qstate: {qstate}")
-
-            s_copy.backstep(forward=True, forward_alpha_prev=cmd_out)
-            p.plot_star(s_copy.star)
-
-            assert cmd_out == expected_cmd, f"got cmd {cmd_out}, expected cmd {expected_cmd}"
-            mat = get_time_elapse_mat(cmd_out, 1.0)
-            pt = mat @ pt
-
-            cmd_quantum_list = [0, 1, -1, 2, -2]
-            delta_q_theta = cmd_quantum_list[cmd_out] * State.theta1_quantum
-            q_theta1 += delta_q_theta
-
-            if i == 5:
-                break
-
-        plt.show()
+        s.print_replay_witness(plot=True)
 
     if not done:
         print("\nfinished enumeration")
+
+def run_single():
+    """test a single (difficult)case"""
+
+    print("running single...")
+
+    alpha_prev=0
+    
+    x_own = (round(-500 / pos_quantum), round(-400 / pos_quantum))
+    y_own = (round(-100 / pos_quantum), round(0 / pos_quantum))
+    
+    theta1_own = round(0.02617993877991494 / theta1_quantum)
+    v_own = round(800 / vel_quantum)
+    v_int = round(1100 / vel_quantum)
+
+    Timers.tic('top')
+    backreach_single(alpha_prev, x_own, y_own, theta1_own, v_own, v_int, plot=False)
+    Timers.toc('top')
+    Timers.print_stats()
+
+    plt.show()
+
+def main():
+    """main entry point"""
+
+    run_single()
+    #run_all()
 
 if __name__ == "__main__":
     main()

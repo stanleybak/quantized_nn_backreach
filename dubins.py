@@ -11,9 +11,10 @@ import numpy as np
 from scipy.linalg import expm
 
 from star import Star
+from settings import pos_quantum, vel_quantum, theta1_quantum
 
-def init_to_constraints(v_own: Tuple[float, float], v_int: Tuple[float, float],
-                 x: Tuple[float, float], y: Tuple[float, float], theta1: Tuple[float, float]):
+def init_to_constraints(qx: Tuple[int, int], qy: Tuple[int, int],
+                        qv_own_min: int, qv_int_min: int, qtheta1_min: int):
     """convert initial variables to box bounds and constraints in linear space
 
     returns box, a_mat, b_vec with Ax <= b constraints
@@ -22,6 +23,18 @@ def init_to_constraints(v_own: Tuple[float, float], v_int: Tuple[float, float],
     rv: List[Tuple[float, float]] = []
     a_mat: List[List[float]] = []
     b_vec: List[float] = []
+
+    # convert to float ranges for box
+    x = (qx[0] * pos_quantum, qx[1] * pos_quantum)
+    y = (qy[0] * pos_quantum, qy[1] * pos_quantum)
+
+    qv_own = qv_own_min, qv_own_min + 1
+    qv_int = qv_int_min, qv_int_min + 1
+    qtheta1 = qtheta1_min, qtheta1_min + 1
+    
+    v_own = (qv_own[0] * vel_quantum, qv_own[1] * vel_quantum)
+    v_int = (qv_int[0] * vel_quantum, qv_int[1] * vel_quantum)
+    theta1 = (qtheta1[0] * theta1_quantum, qtheta1[1] * theta1_quantum)
 
     rv.append(x)
     rv.append(y)

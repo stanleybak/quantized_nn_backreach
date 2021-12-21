@@ -9,6 +9,7 @@ import numpy as np
 
 import kamenev
 from lpinstance import LpInstance
+from timerutil import timed
 
 class Star:
     """linear star set
@@ -101,12 +102,13 @@ class Star:
 
         self.hpoly.add_dense_row(lp_vec, lp_rhs)
 
+    @timed
     def is_feasible(self):
         """is the star feasible?"""
 
         return self.hpoly.is_feasible()
 
-    def get_witness(self):
+    def get_witness(self, print_radius=False):
         """get a witness point of the star, using the Chebeshev center"""
 
         assert self.hpoly.is_feasible()
@@ -163,6 +165,9 @@ class Star:
         max_r[-1] = -1
 
         res = lpi.minimize(max_r)
+
+        if print_radius:
+            print(f"# chebyshev center radius: {res[-1]}")
         
         domain_pt = res[:-1]
         range_pt = self.a_mat @ domain_pt + self.b_vec

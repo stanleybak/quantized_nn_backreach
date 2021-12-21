@@ -8,6 +8,7 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 from star import Star
+from timerutil import timed
 
 class Plotter:
     """object in charge of plotting"""
@@ -24,6 +25,7 @@ class Plotter:
         p = 'resources/bak_matplotlib.mlpstyle'
         plt.style.use(['bmh', p])
 
+    @timed
     def plot_quantization(self, q_list):
         """plot quantized states"""
 
@@ -51,7 +53,8 @@ class Plotter:
         #ax = self.ax_list[0][1]
         #ax.plot(vxos, vyos, "go")
 
-    def plot_star(self, star, color='k'):
+    @timed
+    def plot_star(self, star, color='k', zorder=1):
         """add the current state to the plot"""
 
         labels = ("X_own", "Y_own", "VX_own", "VY_own", "X_int", "VX_int")
@@ -66,9 +69,9 @@ class Plotter:
             ax.set_ylabel(labels[2*index + 1])
 
             verts = star.verts(2*index, 2*index + 1)
-            ax.plot(*zip(*verts), '-', color=color, zorder=1)
+            ax.plot(*zip(*verts), '-', color=color, zorder=zorder)
 
-            ax.plot([witness[2*index]], [witness[2*index + 1]], 'o', color=color, zorder=1)
+            ax.plot([witness[2*index]], [witness[2*index + 1]], 'o', color=color, zorder=zorder)
 
         # plot 4: deltax / deltay
         # dx = x_int - x_own
@@ -86,11 +89,11 @@ class Plotter:
         ydim[Star.Y_OWN] = -1
 
         verts = star.verts(xdim, ydim)
-        ax.plot(*zip(*verts), '-', color=color, zorder=1)
+        ax.plot(*zip(*verts), '-', color=color, zorder=zorder)
 
         proj_witness_dx = xdim @ witness
         proj_witness_dy = ydim @ witness
-        ax.plot([proj_witness_dx], [proj_witness_dy], 'o', color=color, zorder=1)
+        ax.plot([proj_witness_dx], [proj_witness_dy], 'o', color=color, zorder=zorder)
 
         # plot 5: deltavx / deltavy
         # dvx = vx_int - vx_own
@@ -108,7 +111,7 @@ class Plotter:
         ydim[Star.VY_OWN] = -1
 
         verts = star.verts(xdim, ydim)
-        ax.plot(*zip(*verts), '-', color=color, zorder=1)
+        ax.plot(*zip(*verts), '-', color=color, zorder=zorder)
 
         # plot 6: x and y position of both int and ownship
         ax = self.ax_list[1][2]
@@ -117,11 +120,11 @@ class Plotter:
         ax.set_ylabel("Y")
 
         verts = star.verts(Star.X_OWN, Star.Y_OWN)
-        ax.plot(*zip(*verts), 'k-', zorder=1)
+        ax.plot(*zip(*verts), '-', color=color, zorder=zorder)
 
         ydim = np.zeros(Star.NUM_VARS)
         verts = star.verts(Star.X_INT, ydim)
-        ax.plot(*zip(*verts), 'b-o', zorder=1)
+        ax.plot(*zip(*verts), 'b-o', zorder=zorder)
 
 @lru_cache(maxsize=None)
 def get_airplane_img():

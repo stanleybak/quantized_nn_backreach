@@ -14,18 +14,28 @@ import numpy as np
 
 import onnxruntime as ort
 
-def qstate_cmd(alpha_prev, qstate, stdout=False) -> Tuple[int, Tuple[float, float, float, float, float]]:
+from timerutil import timed
+
+from settings import pos_quantum, vel_quantum, theta1_quantum
+
+# TODO: check effect on runtime if LRU cache is used here
+@lru_cache(maxsize=int(1e6))
+@timed
+def get_cmd(alpha_prev, qdx, qdy, qtheta1, qv_own, qv_int, stdout=False) -> int:
     """get the command at the given quantized state
 
-    returns cmd, qinput
+    returns cmd
     """
 
     assert isinstance(alpha_prev, int) and 0 <= alpha_prev <= 4, f"alpha_prev was {alpha_prev}"
 
-    if stdout:
-        print(f"qstate: {qstate}")
-
-    dx, dy, theta1, theta2, v_own, v_int = qstate
+    # convert quantized state to floats
+    dx = pos_quantum / 2 + pos_quantum * qdx
+    dy = pos_quantum / 2 + pos_quantum * qdy
+    theta1 = theta1_quantum / 2 + theta1_quantum * qtheta1
+    theta2 = 0
+    v_own = vel_quantum / 2 + qv_own * vel_quantum
+    v_int = vel_quantum / 2 + qv_int * vel_quantum
 
     # dx is intruder - ownship
 
@@ -64,16 +74,18 @@ def qstate_cmd(alpha_prev, qstate, stdout=False) -> Tuple[int, Tuple[float, floa
             print(f"qinput: {qinput}")
 
         i = np.array(qinput)
-        net = get_network(alpha_prev)
-        out = run_network(net, i)
+
+        out = run_network(alpha_prev, i)
         cmd = int(np.argmin(out))
 
-    return cmd, qinput
+    return cmd
 
-# TODO: check effect on runtime if LRU cache is used here
-# @lru_cache(maxsize=None)
-def run_network(session, x, stdout=False):
+@timed
+def run_network(alpha_prev, x, stdout=False):
     'run the network and return the output'
+
+    # cached
+    session = get_network(alpha_prev)
 
     range_for_scaling, means_for_scaling = get_scaling()
 
