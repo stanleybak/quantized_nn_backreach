@@ -566,7 +566,11 @@ def plot(s, save_mp4=False):
     """plot a specific simulation"""
     
     init_plot()
-    print(f"Plotting state with min_dist: {s.min_dist}")
+    dx = s.state8[0] - s.state8[4]
+    dy = s.state8[1] - s.state8[5]
+    dist = math.sqrt(dx*dx + dy*dy)
+    print(f"Plotting state with min_dist: {round(s.min_dist, 2)} and " + \
+          f"final dx: {round(dx, 1)}, dy: {round(dy, 1)}, dist: {round(dist, 2)}")
     
     fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(8, 8))
     axes.axis('equal')

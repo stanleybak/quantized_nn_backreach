@@ -11,6 +11,22 @@ from settings import pos_quantum
 
 from timerutil import timed
 
+def to_time_str(secs):
+    'return a string representation of the number of seconds'
+
+    divisors = [1, 60, 60*60, 24*60*60, 7*24*60*60, 365*24*60*60, np.inf]
+    labels = ["sec", "min", "hr", "days", "weeks", "years"]
+    bounds = divisors[1:]
+    digits = [3, 2, 3, 4, 4, 4]
+    time_str = ""
+
+    for divisor, digit, label, bound in zip(divisors, digits, labels, bounds):
+        if secs < bound:
+            time_str = f"{round(secs / divisor, digit)} {label}"
+            break
+
+    return time_str
+
 def quantize(x, delta=50):
     """round to the nearest delta (offset by delta / 2)
 
