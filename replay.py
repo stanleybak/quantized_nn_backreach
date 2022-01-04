@@ -22,6 +22,10 @@ from matplotlib.lines import Line2D
 
 import onnxruntime as ort
 
+from settings import pos_quantum, vel_quantum, theta1_quantum
+
+skip_quantization = False
+
 def init_plot():
     'initialize plotting style'
 
@@ -115,18 +119,19 @@ def quantize(x, delta=50):
     for example using 50 will round anything between 0 and 50 to 25
     """
 
-    return delta/2 + delta * round((x - delta/2) / delta)
+    global skip_quantization
+
+    if skip_quantization:
+        rv = x
+    else:
+        rv = delta/2 + delta * round((x - delta/2) / delta)
+
+    return rv
 
 def state8_to_qinput_qstate(state8, stdout=False):
     """compute rho, theta, psi from state7"""
 
     assert len(state8) == 8
-
-    # quantization
-    pos_quantum = 100
-    vel_quantum = 100
-
-    theta1_quantum = 0.02617993877991494 # 1.5 degrees
 
     x1, y1, vxo, vyo, x2, y2, vxi, vyi = state8
 
@@ -533,12 +538,11 @@ class State:
 
         # min inputs: 0, -3.1415, -3.1415, 100, 0
         # max inputs: 60760, 3.1415, 3,1415, 1200, 1200
+        last_command = self.command
 
         if rho > 60760:
             self.command = 0
         else:
-            last_command = self.command
-
             net = State.nets[last_command]
 
             state = [rho, theta, psi, v_own, v_int]
@@ -562,6 +566,7 @@ def plot(s, save_mp4=False):
     """plot a specific simulation"""
     
     init_plot()
+    print(f"Plotting state with min_dist: {s.min_dist}")
     
     fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(8, 8))
     axes.axis('equal')
@@ -589,20 +594,19 @@ def plot(s, save_mp4=False):
     plt.tight_layout()
 
     num_steps = len(states[0].vec_list)
-    interval = 20 # ms per frame
-    freeze_frames = 10 if not save_mp4 else 80
+    interval = 50 # ms per frame
+    freeze_frames = 2 if not save_mp4 else 5
 
     num_runs = 1 # 3
     num_frames = num_runs * num_steps + 2 * num_runs * freeze_frames
+
+    print(f"num_frames: {num_frames}")
 
     #plt.savefig('plot.png')
     #plot_commands(states[0])
 
     def animate(f):
         'animate function'
-
-        if not save_mp4:
-            f *= 5 # multiplier to make animation faster
 
         if (f+1) % 10 == 0:
             print(f"Frame: {f+1} / {num_frames}")
@@ -633,7 +637,7 @@ def plot(s, save_mp4=False):
         artists = [time_text]
 
         for s in states[:num_states]:
-            s.vec = s.vec_list[f]
+            s.state8 = s.vec_list[f]
             artists += s.update_artists(axes)
 
         for s in states[num_states:]:
@@ -653,22 +657,29 @@ def plot(s, save_mp4=False):
 def main():
     'main entry point'
 
+    global skip_quantization
+    try_without_quantization = False
+    
     ###################
-    alpha_prev_list = [3, 3, 3, 3, 1]
-    q_theta1 = -0.19634954084936204
-    q_v_int = 450.0
-    q_v_own = 150.0
-    # chebyshev center radius: 1.521808161858936
-    end = np.array([-426.19673962,   -1.52180816,  198.47819184,    1.52180816,
-              0.        ,  401.52180816])
-    start = np.array([-1214.95319857,    75.27025425,   194.45736885,   -39.77738345,
-           -1606.08723265,   401.52180816])
-
-
+    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0]
+    qtheta1 = 158
+    qv_own = 1
+    qv_int = 3
+    # chebyshev center radius: 0.0076475981421952255
+    end = np.array([-479.34808152, -482.79306833,  -58.92080359,  -80.80499968,
+              0.        ,  399.9923524 ])
+    start = np.array([ -1147.83651049,   7358.36239154,    -52.39928322,    -85.1787778 ,
+           -33599.35760176,    399.9923524 ])
     ##################
 
-    # intruder command list
-    q_theta2 = 0.0
+    skip_end_checks = False
+        
+    if try_without_quantization:
+        skip_quantization = True
+        skip_end_checks = True
+        #alpha_prev_list = []
+
+    q_theta1 = qtheta1 * theta1_quantum + theta1_quantum / 2 
     cmd_list = [0] * (len(alpha_prev_list) - 1)
 
     _, _, vx, vy, _, vxi = start
@@ -676,23 +687,30 @@ def main():
     own_vel = math.sqrt(vx**2 + vy**2)
     int_vel = math.sqrt(vxi**2)
 
-    print(f"own_vel computed: {own_vel}, quantized: {q_v_own}")
-    print(f"int_vel computed: {int_vel}, quantized: {q_v_int}")
+    if not skip_quantization:
+        # double-check quantization matches expectation
+        
+        print(f"own_vel computed: {own_vel}, quantized: {qv_own}")
+        print(f"int_vel computed: {int_vel}, quantized: {qv_int}")
 
-    print(f"ownship vx / vy = {vx}, {vy}")
+        print(f"ownship vx / vy = {vx}, {vy}")
 
-    theta1 = math.atan2(vy, vx)
-    print(f"real theta1: {theta1}")
-    theta1_deg = theta1 * 360/(2*math.pi)
-    q_theta1_deg = q_theta1 * 360/(2*math.pi)
-    print(f"q_theta1 computed: {round(theta1_deg, 3)} deg, quantized: {round(q_theta1_deg, 3)} deg")
+        theta1 = math.atan2(vy, vx)
+        print(f"real theta1: {theta1}")
+        theta1_deg = theta1 * 360/(2*math.pi)
+        q_theta1_deg = q_theta1 * 360/(2*math.pi)
+        print(f"q_theta1 computed: {round(theta1_deg, 3)} deg, quantized: {round(q_theta1_deg, 3)} deg")
 
-    actual_qtheta1 = quantize(theta1, 2*math.pi / (360 / 1.5))
-    print(f"actual_qtheta1: {actual_qtheta1}")
-    actual_qtheta1_deg = actual_qtheta1 * 360/(2*math.pi)
-    print(f"actual_qtheta1_deg = {actual_qtheta1_deg}")
-    assert abs(actual_qtheta1 - q_theta1) < 1e-4, f"qtheta1 was actually {round(actual_qtheta1_deg, 3)}, " + \
-        f"expected {round(q_theta1_deg, 3)}"
+        actual_qtheta1 = quantize(theta1, theta1_quantum)
+        if actual_qtheta1 < 0:
+            actual_qtheta1 += 2 * math.pi
+            
+        print(f"actual_qtheta1: {actual_qtheta1}")
+        actual_qtheta1_deg = actual_qtheta1 * 360/(2*math.pi)
+     
+        print(f"actual_qtheta1_deg = {actual_qtheta1_deg}")
+        assert abs(actual_qtheta1 - q_theta1) < 1e-4, f"qtheta1 was actually {round(actual_qtheta1_deg, 3)}, " + \
+            f"expected {round(q_theta1_deg, 3)}"
 
     init_vec = [start[0], start[1], start[2], start[3], start[4], 0, start[5], 0]
     
@@ -704,27 +722,31 @@ def main():
     s.simulate(cmd_list, stdout=True)
     print("\nSimulation completed.")
 
-    for i, (net, state8, qstate, qinput, cmd_out) in enumerate(s.qinputs):
-        print(f"{i+1}. network {net} with qinput: {tuple(q for q in qinput)} -> {cmd_out}")
-        print(f"state: {tuple(x for x in state8)}")
-        print(f"qstate: {[x for x in qstate]}")
+    if not skip_end_checks:
 
-    expected_end = np.array([end[0], end[1], end[2], end[3], end[4], 0, end[5], 0])
-    print(f"expected end: {expected_end}")
-    print(f"actual end: {s.state8}")
+        for i, (net, state8, qstate, qinput, cmd_out) in enumerate(s.qinputs):
+            print(f"{i+1}. network {net} with qinput: {tuple(q for q in qinput)} -> {cmd_out}")
+            print(f"state: {tuple(x for x in state8)}")
+            print(f"qstate: {[x for x in qstate]}")
 
-    print(f"cmds: {s.commands}, alpha_prev_list: {alpha_prev_list}")
+        expected_end = np.array([end[0], end[1], end[2], end[3], end[4], 0, end[5], 0])
+        print(f"expected end: {expected_end}")
+        print(f"actual end: {s.state8}")
 
-    assert s.commands == list(reversed(alpha_prev_list[:-1])), "command mismatch"
-    print("commands matched!")
+        print(f"cmds: {s.commands}, alpha_prev_list: {list(reversed(alpha_prev_list[:-1]))}")
 
-    difference = np.linalg.norm(s.state8 - expected_end, ord=np.inf)
-    print(f"end state difference: {difference}")
-    assert difference < 1e-4, f"end state mismatch. difference was {difference}"
-    print("end states were close enough")
-    
+        assert s.commands == list(reversed(alpha_prev_list[:-1])), "command mismatch"
+        print("commands matched!")
+
+        difference = np.linalg.norm(s.state8 - expected_end, ord=np.inf)
+        print(f"end state difference: {difference}")
+        assert difference < 1e-2, f"end state mismatch. difference was {difference}"
+        print("end states were close enough")
+    else:
+        print("skipping end checks")
+        
     # optional: do plot
-    #plot(s, save_mp4=False)
+    plot(s, save_mp4=False)
 
 if __name__ == "__main__":
     main()

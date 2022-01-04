@@ -28,6 +28,7 @@ def get_cmd(alpha_prev, qdx, qdy, qtheta1, qv_own, qv_int, stdout=False) -> int:
     """
 
     assert isinstance(alpha_prev, int) and 0 <= alpha_prev <= 4, f"alpha_prev was {alpha_prev}"
+    assert isinstance(qdx, int)
 
     # convert quantized state to floats
     dx = pos_quantum / 2 + pos_quantum * qdx

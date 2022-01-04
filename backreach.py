@@ -2,11 +2,13 @@
 Backreach using quantized inputs
 '''
 
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, TypedDict, Optional, Any
 
 import time
 from copy import deepcopy
 from math import pi, floor, ceil
+
+import multiprocessing
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,13 +16,13 @@ import matplotlib.pyplot as plt
 from star import Star
 from plotting import Plotter
 from dubins import init_to_constraints, get_time_elapse_mat
-from util import quantize, make_qstar
+from util import make_qstar
 from networks import get_cmd
 
 from timerutil import timed, Timers
 from settings import pos_quantum, vel_quantum, theta1_quantum
 
-counter = 0
+shared_num_counterexamples = None # for syncing multiple processes
 
 class State():
     """state of backreach container
@@ -32,8 +34,22 @@ class State():
     debug = False
 
     nn_update_rate = 1.0
-
     next_state_id = 0
+
+    cmd_quantum_list: List[int] = [] # [0, 1, -1, 2, -2]
+
+    @classmethod
+    def init_class(cls):
+        '''init class variables'''
+        
+        q = 2*pi / (360 / 1.5)
+        assert theta1_quantum * round(q/theta1_quantum) - q < 1e-6
+        assert not State.cmd_quantum_list
+
+        # initialize
+        q = 2*pi / (360 / 1.5)
+        cls.cmd_quantum_list = [0, round(q/theta1_quantum), -1 * round(q/theta1_quantum),
+                                         2 * round(q/theta1_quantum), -2 * round(q/theta1_quantum)]
 
     def __init__(self, alpha_prev: int, qtheta1: int, qv_own: int, qv_int: int, \
                  star: Star):
@@ -46,9 +62,9 @@ class State():
         self.alpha_prev_list = [alpha_prev]
 
         if State.debug:
-            self.qinput_star_list = []
+            self.qstate_star_list = []
         else:
-            self.qinput_star_list = None
+            self.qstate_star_list = None
         
         self.star = star
         
@@ -99,23 +115,26 @@ class State():
 
         if State.debug:
             step = 0
-            for i in range(len(s.qinput_star_list) - 1, -1, -1):
+            for i in range(len(s.qstate_star_list) - 1, -1, -1):
                 step += 1
-                qinput, star = s.qinput_star_list[i]
+                qstate, star = s.qstate_star_list[i]
 
-                print(f"{step}. network {s.alpha_prev_list[i+1]} with qinput: {qinput} " + \
+                print(f"{step}. network {s.alpha_prev_list[i+1]} with qstate: {qstate} " + \
                       f"gave cmd {s.alpha_prev_list[i]}")
+
+                #pt = star.get_witness(print_radius=True)[1]
+                # quantize witness
+                #dx = floor((pt[Star.X_INT] - pt[Star.X_OWN]) / pos_quantum)
+                #dy = floor((0 - pt[Star.Y_OWN]) / pos_quantum)
+                #print(f"quantized witness: {dx, dy}")
 
                 p.plot_star(star, color='magenta')
 
             print()
 
-        pq = pos_quantum
         pt = range_pt.copy()
         
         q_theta1 = s.qtheta1
-        q_theta2 = 0
-
         s_copy = deepcopy(s)
 
         p.plot_star(s.star, color='r')
@@ -125,8 +144,8 @@ class State():
             net = s.alpha_prev_list[-(i+1)]
             expected_cmd = s.alpha_prev_list[-(i+2)]
 
-            dx = quantize(pt[Star.X_INT] - pt[Star.X_OWN], pq)
-            dy = quantize(0 - pt[Star.Y_OWN], pq)
+            dx = floor((pt[Star.X_INT] - pt[Star.X_OWN]) / pos_quantum)
+            dy = floor((0 - pt[Star.Y_OWN]) / pos_quantum)
 
             qstate = (dx, dy, q_theta1, s.qv_own, s.qv_int)
             
@@ -146,8 +165,7 @@ class State():
             mat = get_time_elapse_mat(cmd_out, 1.0)
             pt = mat @ pt
 
-            cmd_quantum_list = [0, 1, -1, 2, -2]
-            delta_q_theta = cmd_quantum_list[cmd_out] * theta1_quantum
+            delta_q_theta = State.cmd_quantum_list[cmd_out]# * theta1_quantum
             q_theta1 += delta_q_theta
 
         if mismatch or plot:
@@ -182,9 +200,7 @@ class State():
         self.star.b_vec = mat @ self.star.b_vec
 
         # clear, weak left, weak right, strong left, strong right
-        cmd_quantum_list = [0, 1, -1, 2, -2]
-        delta_q_theta = cmd_quantum_list[cmd]
-        # note: this assume theta1 quantum is 1.5 degrees
+        delta_q_theta = State.cmd_quantum_list[cmd]
 
         if forward:
             self.qtheta1 += delta_q_theta
@@ -196,7 +212,7 @@ class State():
         """get the valid predecessors of this star
         """
 
-        global counter
+        dx_qrange, dy_qrange = self.get_dx_dy_qrange(stdout=stdout)
 
         # compute previous state
         self.backstep()
@@ -219,10 +235,16 @@ class State():
             qstate_to_cmd: Dict[Tuple[int, int], int] = {}
             all_right = True
             all_wrong = True
+            correct_qstates = []
+            incorrect_qstates = []
             
             for qdx in range(dx_qrange[0], dx_qrange[1] + 1):
                 for qdy in range(dy_qrange[0], dy_qrange[1] + 1):
                     qstate = (qdx, qdy)
+
+                    # skip predecessors that are also initial states
+                    if is_init_qstate(qstate):
+                        continue
 
                     out_cmd = get_cmd(prev_cmd, *qstate, *constants)
 
@@ -230,9 +252,11 @@ class State():
 
                     if out_cmd == self.alpha_prev_list[-1]:
                         # command is correct
+                        correct_qstates.append(qstate)
                         all_wrong = False
                     else:
                         # command is wrong
+                        incorrect_qstates.append(qstate)
                         all_right = False
 
             if all_wrong:
@@ -242,201 +266,50 @@ class State():
             if all_right:
                 prev_s = self.copy()
                 prev_s.alpha_prev_list.append(prev_cmd)
+
+                if State.debug:
+                    tup = (correct_qstates, deepcopy(prev_s.star))
+                    prev_s.qstate_star_list.append(tup)
+                
                 rv.append(prev_s)
                 continue
 
             # still have a chance at all correct: if incorrect state are infeasible
             all_incorrect_infeasible = True
-            
-            for qdx in range(dx_qrange[0], dx_qrange[1] + 1):
-                for qdy in range(dy_qrange[0], dy_qrange[1] + 1):
-                    qstate = (qdx, qdy)
-                    out_cmd = qstate_to_cmd.get(qstate)
 
-                    if out_cmd != self.alpha_prev_list[-1]:
-                        # if incorrect commands
-                        star = make_qstar(self.star, qstate)
+            for qstate in incorrect_qstates:
+                # if incorrect commands
+                star = make_qstar(self.star, qstate)
 
-                        if star.is_feasible():
-                            all_incorrect_infeasible = False
-                            break
-
-                if not all_incorrect_infeasible:
+                if star.is_feasible():
+                    all_incorrect_infeasible = False
                     break
 
             if all_incorrect_infeasible:
                 prev_s = self.copy()
                 prev_s.alpha_prev_list.append(prev_cmd)
+
+                if State.debug:
+                    tup = (correct_qstates, deepcopy(prev_s.star))
+                    prev_s.qstate_star_list.append(tup)
+                
                 rv.append(prev_s)
                 continue
 
             # ok, do splitting if command is correct
-            correct_qstates = []
-            incorrect_qstates = []
-            
-            for qdx in range(dx_qrange[0], dx_qrange[1] + 1):
-                for qdy in range(dy_qrange[0], dy_qrange[1] + 1):
-                    qstate = (qdx, qdy)
-                    star = make_qstar(self.star, qstate)
+            for qstate in correct_qstates:
+                star = make_qstar(self.star, qstate)
 
-                    if star.is_feasible():
-                        out_cmd = qstate_to_cmd.get(qstate)
+                if star.is_feasible():
+                    prev_s = self.copy(star)
+                    prev_s.alpha_prev_list.append(prev_cmd)
 
-                        if out_cmd == self.alpha_prev_list[-1]:
-                            correct_qstates.append(qstate)
-                            
-                            prev_s = self.copy(star)
-                            prev_s.alpha_prev_list.append(prev_cmd)
-                            rv.append(prev_s)
-                        else:
-                            incorrect_qstates.append(qstate)
+                    if State.debug:
+                        tup = (qstate, deepcopy(prev_s.star))
+                        prev_s.qstate_star_list.append(tup)
 
-            # split along incorrect qstates
-            # each element is a_mat, rhs_list, states
-            groups: List[Tuple[List[List[float]], List[float], List[Tuple[int, int]]]] = [([], [], correct_qstates)]
+                    rv.append(prev_s)
 
-            # dx = x_int - x_own
-            dx_row = [0.0] * Star.NUM_VARS
-            dx_row[Star.X_INT] = 1
-            dx_row[Star.X_OWN] = -1
-
-            neg_dx_row = [-x for x in dx_row]
-
-            # dy = y_int - y_own
-            dy_row = [0.0] * Star.NUM_VARS
-            #dy_row[Star.Y_INT] = 1 # always 0
-            dy_row[Star.Y_OWN] = -1
-
-            neg_dy_row = [-y for y in dy_row]
-
-            for ix, iy in incorrect_qstates:
-                new_groups: List[Tuple[List[List[float]], List[float], List[Tuple[int, int]]]] = []
-
-                for mat, rhs, qstates in groups:
-                    case1 = []
-                    case2 = []
-                    case3 = []
-                    case4 = []
-
-                    for qstate in qstates:
-                        x, y = qstate
-
-                        if x < ix:
-                            case1.append(qstate)
-                        elif x > ix:
-                            case2.append(qstate)
-                        elif x == ix and y > iy:
-                            case3.append(qstate)
-                        else:
-                            assert x == ix and y < iy
-                            case4.append(qstate)
-
-                    if case1:
-                        new_mat = mat.copy()
-                        new_rhs = rhs.copy()
-
-                        # add x < ix constraint
-                        new_mat.append(dx_row)
-                        new_rhs.append(ix * pos_quantum)
-
-                        tup = (new_mat, new_rhs, case1)
-                        new_groups.append(tup)
-
-                    if case2:
-                        new_mat = mat.copy()
-                        new_rhs = rhs.copy()
-
-                        # add x > ix constraint
-                        new_mat.append(neg_dx_row)
-                        new_rhs.append(-((ix+1) * pos_quantum))
-
-                        tup = (new_mat, new_rhs, case2)
-                        new_groups.append(tup)
-
-                    if case3:
-                        new_mat = mat.copy()
-                        new_rhs = rhs.copy()
-
-                        # add x == ix and y > iy
-                        new_mat.append(dx_row)
-                        new_rhs.append((ix + 1) * pos_quantum)
-
-                        new_mat.append(neg_dx_row)
-                        new_rhs.append(-ix * pos_quantum)
-
-                        new_mat.append(neg_dy_row)
-                        new_rhs.append(-((iy + 1) * pos_quantum))
-
-                        tup = (new_mat, new_rhs, case3)
-                        new_groups.append(tup)
-
-                    if case4:
-                        new_mat = mat.copy()
-                        new_rhs = rhs.copy()
-
-                        # add x == ix and y < iy
-                        new_mat.append(dx_row)
-                        new_rhs.append((ix + 1) * pos_quantum)
-
-                        new_mat.append(neg_dx_row)
-                        new_rhs.append(-ix * pos_quantum)
-
-                        new_mat.append(dy_row)
-                        new_rhs.append(iy * pos_quantum)
-
-                        tup = (new_mat, new_rhs, case4)
-                        new_groups.append(tup)
-
-                # assign for next iteration
-                groups = new_groups
-
-            #print(f"correct ({len(correct_qstates)}): {correct_qstates}")
-            #print(f"incorrect ({len(incorrect_qstates)}): {incorrect_qstates}")
-            #print(f"num groups: {len(groups)}")
-
-            for mat, rhs, _ in groups:
-                star = deepcopy(self.star)
-                for row, val in zip(mat, rhs):
-                    star.add_dense_row(row, val)
-
-                # star should be feasible?!?
-                assert star.is_feasible()
-                prev_s = self.copy(star)
-
-                prev_s.alpha_prev_list.append(prev_cmd)
-                rv.append(prev_s)
-
-            counter += 1
-            
-            if counter >= np.inf:
-                p = Plotter()
-                p.plot_star(self.star, 'k')
-
-                for qdx in range(dx_qrange[0], dx_qrange[1] + 1):
-                    for qdy in range(dy_qrange[0], dy_qrange[1] + 1):
-                        qstate = (qdx, qdy)
-                        star = make_qstar(self.star, qstate)
-
-                        if star.is_feasible():
-                            out_cmd = qstate_to_cmd.get(qstate)
-
-                            if out_cmd != self.alpha_prev_list[-1]:
-                                p.plot_star(star, 'r', zorder=2)
-
-                for i, (mat, rhs, _) in enumerate(groups):
-                    star = deepcopy(self.star)
-                    for row, val in zip(mat, rhs):
-                        star.add_dense_row(row, val)
-
-                    # star should be feasible?!?
-                    assert star.is_feasible()
-
-                    color = ['g', 'b'][i % 2]
-                    p.plot_star(star, color, zorder=2)
-                
-                plt.show()
-                exit(1)
-            
         return rv
 
     @timed
@@ -469,13 +342,63 @@ class State():
 
         return dx_qrange, dy_qrange
 
+def is_init_qstate(qstate):
+    """is this an initial qstate?
+
+    returns True if any of the corners is inside the collision circle
+    """
+
+    rv = False
+    qx, qy = qstate
+
+    xs = (qx * pos_quantum, (qx+1) * pos_quantum)
+    ys = (qy * pos_quantum, (qy+1) * pos_quantum)
+
+    # since qstates are algigned with x == 0 and y == 0 lines,
+    # we just need to check if ant of the corners are initial states
+    collision_rad_sq = 500**2
+    epsilon = 1e-6
+
+    for x in xs:
+        for y in ys:
+            dist_sq = x*x + y*y
+            
+            if dist_sq < collision_rad_sq - epsilon:
+                # one of corners was inside collision circle
+                rv = True
+                break
+
+        if rv:
+            break
+
+    return rv
+
+class BackreachResult(TypedDict):
+    counterexample: Optional[State]
+    longest_alpha_prev_list_state: State
+    runtime: float
+    num_popped: int
+    unique_paths: int
+    #params: Tuple[int, Tuple[int, int], Tuple[int, int], int, int, int]
+
+def parallel_init(num_counterexamples):
+    """init shared sync variable"""
+
+    global shared_num_counterexamples
+
+    shared_num_counterexamples = num_counterexamples
+
 def backreach_single(init_alpha_prev: int, x_own: Tuple[int, int], y_own: Tuple[int, int],
-                     theta1: int, v_own: int, v_int: int, target_len=None, plot=False):
+                     theta1: int, v_own: int, v_int: int, target_len=None, plot=False) -> Optional[BackreachResult]:
     """run backreachability from a single symbolic state"""
 
-    #q_v_int = (v_int[0] + v_int[1]) / 2
-    #q_v_own = (v_own[0] + v_own[1]) / 2
-    #q_theta1 = (theta1_own[0] + theta1_own[1]) / 2
+    global shared_num_counterexamples
+    num_counterexamples = shared_num_counterexamples
+
+    if num_counterexamples is not None and num_counterexamples.value > 0:
+        return None
+
+    start = time.perf_counter()
 
     box, a_mat, b_vec = init_to_constraints(x_own, y_own, v_own, v_int, theta1)
 
@@ -489,14 +412,16 @@ def backreach_single(init_alpha_prev: int, x_own: Tuple[int, int], y_own: Tuple[
     #colors = ['b', 'lime', 'r', 'g', 'magenta', 'cyan', 'pink']
     popped = 0
 
-    rv = {'counterexample': None, 'longest alpha_prev_list state': init_s}
+    #params = (init_alpha_prev, x_own, y_own, theta1, v_own, v_int)
+    rv: BackreachResult = {'counterexample': None, 'longest_alpha_prev_list_state': init_s, 'runtime': np.inf,
+                           'num_popped': 0, 'unique_paths': 0}
     deadends = set()
+
+    plotter: Optional[Plotter] = None
 
     if plot:
         plotter = Plotter()
         plotter.plot_star(init_s.star, 'r')
-    else:
-        plotter = None
 
     while work:
 
@@ -504,9 +429,15 @@ def backreach_single(init_alpha_prev: int, x_own: Tuple[int, int], y_own: Tuple[
             print("break because of counterexample")
             break
 
-        if target_len is not None and len(rv['longest alpha_prev_list state'].alpha_prev_list) >= target_len:
+        if target_len is not None and len(rv['longest_alpha_prev_list_state'].alpha_prev_list) >= target_len:
             print(f"break because of alpha_prev_list len >= target({target_len})")
             break
+
+        if popped % 100 == 0:
+            if num_counterexamples is not None and num_counterexamples.value > 0:
+                # don't need lock since we're just reading
+                print("break because shared num_counterexamples > 0")
+                break
         
         s = work.pop()
         #print(f"{popped}: {s.alpha_prev_list}")
@@ -520,56 +451,90 @@ def backreach_single(init_alpha_prev: int, x_own: Tuple[int, int], y_own: Tuple[
             if p.alpha_prev_list[-2] == 0 and p.alpha_prev_list[-1] == 0:
                 rv['counterexample'] = deepcopy(p)
 
-            if len(p.alpha_prev_list) > len(rv['longest alpha_prev_list state'].alpha_prev_list):
-                rv['longest alpha_prev_list state'] = deepcopy(p)
+                if num_counterexamples is not None:
+                    with num_counterexamples.get_lock():
+                        num_counterexamples.value += 1
+
+                break
+
+            if len(p.alpha_prev_list) > len(rv['longest_alpha_prev_list_state'].alpha_prev_list):
+                rv['longest_alpha_prev_list_state'] = deepcopy(p)
 
         if not predecessors:
             deadends.add(tuple(s.alpha_prev_list))
 
-    print(f"num popped: {popped}")
-    print(f"unique paths: {len(deadends)}")
+    #print(f"num popped: {popped}")
+    #print(f"unique paths: {len(deadends)}")
 
     #for i, path in enumerate(deadends):
     #    print(f"{i+1}: {path}")
+
+    diff = time.perf_counter() - start
+    rv['runtime'] = diff
+    rv['num_popped'] = popped
+    rv['unique_paths'] = len(deadends)
+    
+    print(".", end='', flush=True)
 
     return rv
 
 def run_all():
     """loop over all cases"""
-    
+
+    # 11 mins with alpha_prev=4 and quantum 100
+    # expected runtime: 100 * 11 / 60 = 11 hours for complete enumeration!
+
     alpha_prev = 4
 
-    x_own = (round(-500 / pos_quantum), round(-400 / pos_quantum))
-    y_own = (round(-100 / pos_quantum), round(0 / pos_quantum))
+    #x_own = (round(-500 / pos_quantum), round(-400 / pos_quantum))
+    x_own = (-1, 0)
+    y_own = (-1, 0)
 
     done = False
     s = None
-    target_len = 30 #None
 
     max_qtheta1 = round(2*pi / theta1_quantum)
-    
-    for qtheta1 in range(0, max_qtheta1):
+    vel_ownship = (100, 1200)
+    #vel_intruder = (0, 1200) # full range
+    vel_intruder = (0, 400)
+
+    for i in range(2):
+        assert vel_ownship[i] % vel_quantum < 1e-6
+        assert vel_intruder[i] % vel_quantum < 1e-6
+
+    # shared variable for coordination
+    num_counterexamples = multiprocessing.Value('i', 0)
         
-        for q_vown in range(round(100/vel_quantum), round(1200/vel_quantum)):
-        
-            print(f"\n{round(qtheta1/max_qtheta1, 2)}%-{q_vown*vel_quantum}/1200:", end='')
+    with multiprocessing.Pool(initializer=parallel_init, initargs=(num_counterexamples, )) as pool:
+        for qtheta1 in range(0, max_qtheta1):
+            print(f"\n{round(100 * qtheta1/max_qtheta1, 2)}%:", end='')
+            
+            params_list = []
+            
+            for q_vown in range(round(vel_ownship[0]/vel_quantum), round(vel_ownship[1]/vel_quantum)):
+                for q_vint in range(round(vel_intruder[0]/vel_quantum), round(vel_intruder[1]/vel_quantum)):
+                    print(".", flush=True, end='')
 
-            for q_vint in range(0, round(1200/vel_quantum)):
-                print(".", flush=True, end='')
+                    params = (alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint)
+                    params_list.append(params)
 
-                start = time.perf_counter()
-                res = backreach_single(alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint, target_len=target_len)
-                diff = time.perf_counter() - start
+            res_list = pool.starmap(backreach_single, params_list)
 
-                if diff > 1.0:
+            for params, res in zip(params_list, res_list):
+                if res is None:
+                    continue
+                
+                diff = res['runtime']
+
+                if diff > 2.0:
+                    alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint = params
+                    num_popped = res['num_popped']
+                    unique_paths = res['unique_paths']
+                    unsafe = res['counterexample'] is not None
+                    
                     print(f"\nlong runtime ({round(diff, 2)}) for:\nalpha_prev={alpha_prev}\nx_own={x_own}\n" + \
                           f"y_own={y_own}\nqtheta1={qtheta1}\nq_vown={q_vown}\nq_vint={q_vint}")
-
-                if len(res['longest alpha_prev_list state'].alpha_prev_list) >= target_len:
-                    print("found target len")
-                    s = res['longest alpha_prev_list state']
-                    done = True
-                    break
+                    print(f'num_popped: {num_popped}, unique_paths: {unique_paths}, has_counterexample: {unsafe}')
 
                 if res['counterexample'] is not None:
                     print("!!!!! counterexample!!!!")
@@ -577,38 +542,41 @@ def run_all():
                     done = True
                     break
 
+                if done:
+                    break
+
             if done:
                 break
 
-        if done:
-            break
-
     if s is not None:
-        print(f"longest alpha_prev_list was {len(s.alpha_prev_list)}: {s}\n")
+        print(f"alpha_prev_list len was {len(s.alpha_prev_list)}\n")
                             
         s.print_replay_init()
 
-        s.print_replay_witness(plot=True)
+        s.print_replay_witness(plot=False)
+        print("replay matches")
 
     if not done:
         print("\nfinished enumeration")
 
 def run_single():
-    """test a single (difficult)case"""
+    """test a single (difficult) case"""
 
     print("running single...")
 
-    alpha_prev=0
-    
-    x_own = (round(-500 / pos_quantum), round(-400 / pos_quantum))
-    y_own = (round(-100 / pos_quantum), round(0 / pos_quantum))
-    
-    theta1_own = round(0.02617993877991494 / theta1_quantum)
-    v_own = round(800 / vel_quantum)
-    v_int = round(1100 / vel_quantum)
+    case_num = 0
+    plot = False
+
+    if case_num == 0: # counterexample, 79 secs, num popped: 244300, unique paths: 2318
+        alpha_prev=4
+        x_own=(-5, -4)
+        y_own=(-1, 0)
+        qtheta1=0
+        q_vown=1
+        q_vint=9
 
     Timers.tic('top')
-    backreach_single(alpha_prev, x_own, y_own, theta1_own, v_own, v_int, plot=False)
+    backreach_single(alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint, plot=plot)
     Timers.toc('top')
     Timers.print_stats()
 
@@ -617,8 +585,10 @@ def run_single():
 def main():
     """main entry point"""
 
-    run_single()
-    #run_all()
+    State.init_class()
+
+    #run_single()
+    run_all()
 
 if __name__ == "__main__":
     main()

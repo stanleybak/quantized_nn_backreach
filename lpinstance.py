@@ -90,47 +90,6 @@ class LpInstance(Freezable):
     def __deepcopy__(self, memo):
         return LpInstance(self)
 
-    def serialize(self):
-        'serialize self.lp from a glpk instance into a tuple'
-
-        Timers.tic('serialize')
-
-        # get constraints as csr matrix
-        lp_rows = self.get_num_rows()
-        lp_cols = self.get_num_cols()
-
-        inds_row = SwigArray.get_int_array(lp_cols + 1)
-        vals_row = SwigArray.get_double_array(lp_cols + 1)
-
-        data = []
-        glpk_indices = []
-        indptr = [0]
-
-        for row in range(lp_rows):
-            got_len = glpk.glp_get_mat_row(self.lp, row + 1, inds_row, vals_row)
-
-            for i in range(1, got_len+1):
-                data.append(vals_row[i])
-                glpk_indices.append(inds_row[i])
-
-            indptr.append(len(data))
-            
-        # rhs
-        rhs = []
-        
-        for row in range(lp_rows):
-            assert glpk.glp_get_row_type(self.lp, row + 1) == glpk.GLP_UP
-
-            rhs.append(glpk.glp_get_row_ub(self.lp, row + 1))
-
-        col_bounds = self.get_col_bounds()
-
-        # remember to free lp object before overwriting with tuple
-        glpk.glp_delete_prob(self.lp)
-        self.lp = (data, glpk_indices, indptr, rhs, col_bounds)
-
-        Timers.toc('serialize')
-
     def get_col_bounds(self):
         '''get column bounds
 
@@ -162,19 +121,49 @@ class LpInstance(Freezable):
 
         return col_bounds
 
-    def deserialize(self):
-        'deserialize self.lp from a tuple into a glpk_instance'
+    def __getstate__(self):
+        'need special handling due to swiglpk'
 
-        assert isinstance(self.lp, tuple)
+        # get constraints as csr matrix
+        lp_rows = self.get_num_rows()
+        lp_cols = self.get_num_cols()
 
-        Timers.tic('deserialize')
+        inds_row = SwigArray.get_int_array(lp_cols + 1)
+        vals_row = SwigArray.get_double_array(lp_cols + 1)
 
-        data, glpk_indices, indptr, rhs, col_bounds = self.lp
+        data = []
+        glpk_indices = []
+        indptr = [0]
+
+        for row in range(lp_rows):
+            got_len = glpk.glp_get_mat_row(self.lp, row + 1, inds_row, vals_row)
+
+            for i in range(1, got_len+1):
+                data.append(vals_row[i])
+                glpk_indices.append(inds_row[i])
+
+            indptr.append(len(data))
+            
+        # rhs
+        rhs = []
+        
+        for row in range(lp_rows):
+            assert glpk.glp_get_row_type(self.lp, row + 1) == glpk.GLP_UP
+
+            rhs.append(glpk.glp_get_row_ub(self.lp, row + 1))
+
+        col_bounds = self.get_col_bounds()
+
+        return self.names, data, glpk_indices, indptr, rhs, col_bounds
+
+    def __setstate__(self, tup):
+        'spectial de-pickling logic due to swiglpk'
+
+        names, data, glpk_indices, indptr, rhs, col_bounds = tup
 
         self.lp = glpk.glp_create_prob()
 
         # add cols
-        names = self.names
         self.names = [] # adding columns populates self.names
 
         num_cols = len(col_bounds)
@@ -200,8 +189,6 @@ class LpInstance(Freezable):
         # set constraints
         shape = (num_rows, num_cols)
         self.set_constraints_csr(data, glpk_indices, indptr, shape)
-
-        Timers.toc('deserialize')
 
     def _column_names_str(self):
         'get the line in __str__ for the column names'

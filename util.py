@@ -23,10 +23,6 @@ def quantize(x, delta=50):
 def make_qstar(orig_star, qstate):
     """return a subset of the star within the given quantization box"""
 
-    # note this can likely be sped up a lot by avoiding calls to lp using sampling and testing constraints
-    # or finding closest point in the box and checking that first
-    # probably eventually still need lp to disprove things though
-
     qdx, qdy = qstate[:2]
     max_x = (qdx + 1) * pos_quantum
     min_x = (qdx) * pos_quantum
