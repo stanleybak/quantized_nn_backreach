@@ -14,9 +14,6 @@ from scipy.sparse import csr_matrix
 from termcolor import colored
 
 import swiglpk as glpk
-from nnenum.util import Freezable
-from nnenum.timerutil import Timers
-from nnenum.settings import Settings
 
 def get_lp_params(alternate_lp_params=False):
     'get the lp params object'
@@ -27,9 +24,9 @@ def get_lp_params(alternate_lp_params=False):
 
         #params.msg_lev = glpk.GLP_MSG_ERR
         params.msg_lev = glpk.GLP_MSG_ERR
-        params.meth = glpk.GLP_PRIMAL if Settings.GLPK_FIRST_PRIMAL else glpk.GLP_DUAL
+        params.meth = glpk.GLP_PRIMAL
 
-        params.tm_lim = int(Settings.GLPK_TIMEOUT * 1000)
+        params.tm_lim = int(30 * 1000)
         params.out_dly = 2 * 1000 # start printing to terminal delay
         
         get_lp_params.obj = params
@@ -37,10 +34,10 @@ def get_lp_params(alternate_lp_params=False):
         # make alternative params
         params2 = glpk.glp_smcp()
         glpk.glp_init_smcp(params2)
-        params2.meth = glpk.GLP_DUAL if Settings.GLPK_FIRST_PRIMAL else glpk.GLP_PRIMAL
+        params2.meth = glpk.GLP_DUAL
         params2.msg_lev = glpk.GLP_MSG_ON
 
-        params2.tm_lim = int(Settings.GLPK_TIMEOUT * 1000)
+        params2.tm_lim = int(60 * 1000)
         params2.out_dly = 1 * 1000 # start printing to terminal status after 1 secs
         
         get_lp_params.alt_obj = params2
@@ -54,7 +51,7 @@ def get_lp_params(alternate_lp_params=False):
 
     return rv
 
-class LpInstance(Freezable):
+class LpInstance:
     'Linear programming wrapper using glpk (through swiglpk python interface)'
 
     lp_time_limit_sec = 15.0
@@ -73,11 +70,7 @@ class LpInstance(Freezable):
             # initialize from other lpi
             self.names = other_lpi.names.copy()
                 
-            Timers.tic('glp_copy_prob')
             glpk.glp_copy_prob(self.lp, other_lpi.lp, glpk.GLP_OFF)
-            Timers.toc('glp_copy_prob')
-
-        self.freeze_attrs()
 
     def __del__(self):
         if hasattr(self, 'lp') and self.lp is not None:
@@ -453,18 +446,16 @@ class LpInstance(Freezable):
                     assert lb < ub
                     glpk.glp_set_col_bnds(self.lp, num_cols + i + 1, glpk.GLP_DB, lb, ub)  # double-bounded variable
 
-    def add_dense_row(self, vec, rhs, normalize=False):
+    def add_dense_row(self, vec, rhs, normalize=True):
         '''
         add a row from a dense nd.array, row <= rhs
         '''
-
-        Timers.tic('add_dense_row')
 
         assert isinstance(vec, np.ndarray)
         assert len(vec.shape) == 1 or vec.shape[0] == 1
         assert len(vec) == self.get_num_cols(), f"vec had {len(vec)} values, but lpi has {self.get_num_cols()} cols"
 
-        if normalize and not Settings.SKIP_CONSTRAINT_NORMALIZATION:
+        if normalize:
             norm = np.linalg.norm(vec)
             
             if norm > 1e-9:
@@ -480,8 +471,6 @@ class LpInstance(Freezable):
 
         glpk.glp_set_mat_row(self.lp, rows_before + 1, vec.size, indices_vec, data_vec)
 
-        Timers.toc('add_dense_row')
-
     def set_constraints_csr(self, data, glpk_indices, indptr, shape):
         '''
         set the constrains row by row to be equal to the passed-in csr matrix attribues
@@ -489,7 +478,6 @@ class LpInstance(Freezable):
         glpk_indices is already offset by one
         '''
 
-        Timers.tic('set_constraints_csr')
         assert shape[0] <= self.get_num_rows()
         assert shape[1] <= self.get_num_cols()
 
@@ -511,8 +499,6 @@ class LpInstance(Freezable):
             data_vec = SwigArray.as_double_array(data[indptr[row]:indptr[row+1]], count)
 
             glpk.glp_set_mat_row(self.lp, 1 + row, count, indices_vec, data_vec)
-
-        Timers.toc('set_constraints_csr')
 
     def get_rhs(self, row_indices=None):
         '''get the rhs vector of the constraints
@@ -645,9 +631,6 @@ class LpInstance(Freezable):
 
         self.set_minimize_direction(direction_vec)
 
-        if Settings.GLPK_RESET_BEFORE_MINIMIZE:
-            self.reset_basis()
-        
         start = time.perf_counter()
         simplex_res = glpk.glp_simplex(self.lp, get_lp_params())
 
