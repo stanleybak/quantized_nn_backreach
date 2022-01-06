@@ -572,15 +572,7 @@ def run_all():
             if t > max_runtime_result_params[0]:
                 max_runtime_result_params = (t, res, params)
 
-    if counterexample is not None:
-        counterexample.print_replay_init()
-        counterexample.print_replay_witness(plot=False)
-        print("replay matches")
-    else:
-        # counterexample is none
-        assert max_runtime_result_params[1] is not None
-        assert max_runtime_result_params[2] is not None
-        
+    if max_runtime_result_params[1] is not None and max_runtime_result_params[2] is not None:
         diff = max_runtime_result_params[0]
         res = max_runtime_result_params[1]
         alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint = max_runtime_result_params[2] 
@@ -592,6 +584,11 @@ def run_all():
         print(f"\nlongest runtime ({round(diff, 2)}) for:\nalpha_prev={alpha_prev}\nx_own={x_own}\n" + \
               f"y_own={y_own}\nqtheta1={qtheta1}\nq_vown={q_vown}\nq_vint={q_vint}")
         print(f'num_popped: {num_popped}, unique_paths: {unique_paths}, has_counterexample: {unsafe}')
+
+    if counterexample is not None:
+        counterexample.print_replay_init()
+        counterexample.print_replay_witness(plot=False)
+        print("replay matches")
 
     if not has_skipped_case:
         diff = time.perf_counter() - global_start_time

@@ -22,8 +22,11 @@ pip3 install -r requirements.txt
 test if things looks like they're working
 python3 backreach.py (ctrl + c to kill)
 
-For an persistent process that will keep running when ssh closes, use:
+For an persistent process that will keep running when ssh closes, and then shuts down the connection use:
 ~> stdbuf -oL python3 backreach.py >& stdout.txt &
+
+if you also want to shut down the machine when things are done, try this one instead (untested, not sure if it actually stops it: 
+~> (stdbuf -oL python3 backreach.py >& stdout.txt && sudo halt) & 
 
 
 (stdbuf -oL disables unnecessary buffering when redirecting stdout, stdout and stderr will be sent to the file my_stdout.txt and the '&' starts the process in the backround)
