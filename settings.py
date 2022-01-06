@@ -5,7 +5,7 @@ Settings for quantized backreach
 from math import pi
 
 # real? counter-example found with quanta: 10,10,0.1
-pos_quantum = 125 #250
+pos_quantum = 100 #250
 vel_quantum = 50 # 50
 theta1_deg = 1.5 # should divide 1.5 degrees evenly
 

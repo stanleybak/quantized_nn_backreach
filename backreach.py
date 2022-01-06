@@ -463,13 +463,20 @@ def backreach_single(init_alpha_prev: int, x_own: Tuple[int, int], y_own: Tuple[
         for p in predecessors:
             work.append(p)
             
-            if p.alpha_prev_list[-2] == 0 and p.alpha_prev_list[-1] == 0 and len(p.alpha_prev_list) > 20:
-                rv['counterexample'] = deepcopy(p)
+            if p.alpha_prev_list[-2] == 0 and p.alpha_prev_list[-1] == 0:
+                _domain_pt, pt = p.star.get_witness()
 
-                with shared_num_counterexamples.get_lock():
-                    shared_num_counterexamples.value += 1
+                dx = (pt[Star.X_INT] - pt[Star.X_OWN])
+                dy = (0 - pt[Star.Y_OWN])
+                # > 20000 ft
+                
+                if dx**2 + dy**2 > 10000**2:
+                    rv['counterexample'] = deepcopy(p)
 
-                break
+                    with shared_num_counterexamples.get_lock():
+                        shared_num_counterexamples.value += 1
+
+                    break
 
         if not predecessors:
             deadends.add(tuple(s.alpha_prev_list))
