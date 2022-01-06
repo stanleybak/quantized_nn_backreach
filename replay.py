@@ -665,22 +665,23 @@ def main():
     try_without_quantization = False
     
     ###################
-    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0]
-    qtheta1 = 158
+    alpha_prev_list = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0]
+    qtheta1 = 97
     qv_own = 1
     qv_int = 3
-    # chebyshev center radius: 0.0076475981421952255
-    end = np.array([-479.34808152, -482.79306833,  -58.92080359,  -80.80499968,
-              0.        ,  399.9923524 ])
-    start = np.array([ -1147.83651049,   7358.36239154,    -52.39928322,    -85.1787778 ,
-           -33599.35760176,    399.9923524 ])
+    # chebyshev center radius: 0.062114163245700786
+    end = np.array([211.95753641, 448.96479937,  41.61686091,  93.62571348,
+             0.        , 398.89202108])
+    start = np.array([  -232.32944891,  -6504.22433693,    -84.47387174,     57.98191382,
+           -32709.14572853,    398.89202108])
+
     ##################
 
-    skip_end_checks = False
+    skip_checks = True
         
     if try_without_quantization:
         skip_quantization = True
-        skip_end_checks = True
+        skip_checks = True
         #alpha_prev_list = []
 
     q_theta1 = qtheta1 * theta1_quantum + theta1_quantum / 2 
@@ -691,7 +692,7 @@ def main():
     own_vel = math.sqrt(vx**2 + vy**2)
     int_vel = math.sqrt(vxi**2)
 
-    if not skip_quantization:
+    if not skip_quantization and not skip_checks:
         # double-check quantization matches expectation
         
         print(f"own_vel computed: {own_vel}, quantized: {qv_own}")
@@ -711,7 +712,7 @@ def main():
             
         print(f"actual_qtheta1: {actual_qtheta1}")
         actual_qtheta1_deg = actual_qtheta1 * 360/(2*math.pi)
-     
+
         print(f"actual_qtheta1_deg = {actual_qtheta1_deg}")
         assert abs(actual_qtheta1 - q_theta1) < 1e-4, f"qtheta1 was actually {round(actual_qtheta1_deg, 3)}, " + \
             f"expected {round(q_theta1_deg, 3)}"
@@ -726,12 +727,13 @@ def main():
     s.simulate(cmd_list, stdout=True)
     print("\nSimulation completed.")
 
-    if not skip_end_checks:
+    if not skip_checks:
 
-        for i, (net, state8, qstate, qinput, cmd_out) in enumerate(s.qinputs):
-            print(f"{i+1}. network {net} with qinput: {tuple(q for q in qinput)} -> {cmd_out}")
-            print(f"state: {tuple(x for x in state8)}")
-            print(f"qstate: {[x for x in qstate]}")
+        if False:
+            for i, (net, state8, qstate, qinput, cmd_out) in enumerate(s.qinputs):
+                print(f"{i+1}. network {net} with qinput: {tuple(q for q in qinput)} -> {cmd_out}")
+                print(f"state: {tuple(x for x in state8)}")
+                print(f"qstate: {[x for x in qstate]}")
 
         expected_end = np.array([end[0], end[1], end[2], end[3], end[4], 0, end[5], 0])
         print(f"expected end: {expected_end}")
