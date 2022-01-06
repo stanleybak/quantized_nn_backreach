@@ -606,10 +606,10 @@ def run_single():
     alpha_prev=4
     x_own=(-2, -1)
     y_own=(-2, -1)
-    qtheta1=153
-    q_vown=4
-    q_vint=15
-    # num_popped: 395775, unique_paths: 8476, has_counterexample: False
+    qtheta1=151
+    q_vown=2
+    q_vint=7
+    #num_popped: 805225, unique_paths: 8468, has_counterexample: False
 
     Timers.tic('top')
     res = backreach_single(alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint, plot=False)
