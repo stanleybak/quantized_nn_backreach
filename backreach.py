@@ -36,7 +36,7 @@ def increment_progress():
         shared_num_completed.value += 1
         completed = shared_num_completed.value
     
-    if completed % 50 == 1:
+    if completed % 200 == 1:
         # print progress
         
         percent = 100 * completed / global_total_num_cases
@@ -46,7 +46,8 @@ def increment_progress():
         print(f"\n{round(percent, 2)}% Elapsed: {to_time_str(elapsed)}, ETA: {to_time_str(eta)} " + \
               f"{completed}/{global_total_num_cases}: ", end='', flush=True)
     else:
-        print(".", end='', flush=True)
+        if completed % 4 == 0:
+            print(".", end='', flush=True)
 
 class State():
     """state of backreach container
@@ -516,8 +517,8 @@ def make_params():
     params_list = []
 
     # try to do cases that are more likely to be false first
-    for alpha_prev in reversed(range(5)):
-        for q_vint in reversed(range(qvimin, qvimax)):
+    for q_vint in reversed(range(qvimin, qvimax)):
+        for alpha_prev in reversed(range(5)):
             for q_vown in range(qvomin, qvomax):
                 for y_own_start in range(y_own_min, y_own_max):
                     y_own = (y_own_start, y_own_start + 1)
@@ -540,13 +541,13 @@ def run_all():
     global global_start_time
 
     # shared variable for coordination
-    global_start_time = time.perf_counter()
-
+    start = time.perf_counter()
     params_list = make_params()
 
     global_total_num_cases = len(params_list)
-    diff = time.perf_counter() - global_start_time
+    diff = time.perf_counter() - start
     print(f"Made params for {global_total_num_cases} cases in {round(diff, 2)} secs")
+    global_start_time = time.perf_counter()
 
     with multiprocessing.Pool() as pool:
         res_list = pool.starmap(backreach_single, params_list)
@@ -602,16 +603,16 @@ def run_single():
 
     print("running single...")
 
-    alpha_prev=3
-    x_own=(0, 1)
-    y_own=(1, 2)
-    qtheta1=105
-    q_vown=2
-    q_vint=7
-    plot = False
+    alpha_prev=4
+    x_own=(-2, -1)
+    y_own=(-2, -1)
+    qtheta1=153
+    q_vown=4
+    q_vint=15
+    # num_popped: 395775, unique_paths: 8476, has_counterexample: False
 
     Timers.tic('top')
-    res = backreach_single(alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint, plot=plot)
+    res = backreach_single(alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint, plot=False)
     Timers.toc('top')
     Timers.print_stats()
 
@@ -626,8 +627,8 @@ def main():
 
     State.init_class()
 
-    #run_single()
-    run_all()
+    run_single()
+    #run_all()
 
 if __name__ == "__main__":
     main()
