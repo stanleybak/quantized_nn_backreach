@@ -548,9 +548,6 @@ def run_all():
     diff = time.perf_counter() - global_start_time
     print(f"Made params for {global_total_num_cases} cases in {round(diff, 2)} secs")
 
-    print("debug exit")
-    exit(1)
-
     with multiprocessing.Pool() as pool:
         res_list = pool.starmap(backreach_single, params_list)
         max_runtime_result_params = (-np.inf, None, None)
