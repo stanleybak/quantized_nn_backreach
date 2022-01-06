@@ -36,7 +36,7 @@ def increment_progress():
         shared_num_completed.value += 1
         completed = shared_num_completed.value
     
-    if completed % 200 == 1:
+    if completed % 1000 == 1:
         # print progress
         
         percent = 100 * completed / global_total_num_cases
@@ -46,7 +46,7 @@ def increment_progress():
         print(f"\n{round(percent, 2)}% Elapsed: {to_time_str(elapsed)}, ETA: {to_time_str(eta)} " + \
               f"{completed}/{global_total_num_cases}: ", end='', flush=True)
     else:
-        if completed % 4 == 0:
+        if completed % 20 == 0:
             print(".", end='', flush=True)
 
 class State():
@@ -463,7 +463,7 @@ def backreach_single(init_alpha_prev: int, x_own: Tuple[int, int], y_own: Tuple[
         for p in predecessors:
             work.append(p)
             
-            if p.alpha_prev_list[-2] == 0 and p.alpha_prev_list[-1] == 0:
+            if p.alpha_prev_list[-2] == 0 and p.alpha_prev_list[-1] == 0 and len(p.alpha_prev_list) > 20:
                 rv['counterexample'] = deepcopy(p)
 
                 with shared_num_counterexamples.get_lock():
@@ -520,8 +520,8 @@ def make_params():
     params_list = []
 
     # try to do cases that are more likely to be false first
-    for q_vint in reversed(range(qvimin, qvimax)):
-        for alpha_prev in reversed(range(5)):
+    for alpha_prev in reversed(range(5)):
+        for q_vint in reversed(range(qvimin, qvimax)):
             for q_vown in range(qvomin, qvomax):
                 for y_own_start in range(y_own_min, y_own_max):
                     y_own = (y_own_start, y_own_start + 1)
@@ -557,7 +557,7 @@ def run_all():
         max_runtime_result_params = (-np.inf, None, None)
         total_runtime = 0.0
         has_skipped_case = False
-        counterexample = None
+        counterexample_res = None
 
         for params, res in zip(params_list, res_list):
             if res is None:
@@ -566,7 +566,7 @@ def run_all():
 
             if res['counterexample'] is not None:
                 print("!!!!! counterexample!!!!")
-                counterexample = res['counterexample']
+                counterexample_res = res
                 break
 
             t = res['runtime']
@@ -588,10 +588,22 @@ def run_all():
               f"y_own={y_own}\nqtheta1={qtheta1}\nq_vown={q_vown}\nq_vint={q_vint}")
         print(f'num_popped: {num_popped}, unique_paths: {unique_paths}, has_counterexample: {unsafe}')
 
-    if counterexample is not None:
+    if counterexample_res is not None:
+        counterexample = counterexample_res['counterexample']
+        assert counterexample is not None
+        
         print("\nCounterexample:")
         counterexample.print_replay_init()
         counterexample.print_replay_witness(plot=False)
+
+        res = counterexample_res
+        num_popped = res['num_popped']
+        unique_paths = res['unique_paths']
+        runtime = res['runtime']
+        unsafe = res['counterexample'] is not None
+        
+        print(f'num_popped: {num_popped}, unique_paths: {unique_paths}, has_counterexample: {unsafe}, ' + \
+              f'runtime: {runtime}')
 
     if not has_skipped_case:
         diff = time.perf_counter() - global_start_time
@@ -606,12 +618,12 @@ def run_single():
     print("running single...")
 
     alpha_prev=4
-    x_own=(-2, -1)
-    y_own=(-2, -1)
-    qtheta1=151
+    x_own=(-3, -2)
+    y_own=(-4, -3)
+    qtheta1=152
     q_vown=2
     q_vint=7
-    #num_popped: 805225, unique_paths: 8468, has_counterexample: False
+    #num_popped: 1043422, unique_paths: 5551, has_counterexample: False
 
     Timers.tic('top')
     res = backreach_single(alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint, plot=False)
@@ -629,8 +641,8 @@ def main():
 
     State.init_class()
 
-    #run_single()
-    run_all()
+    run_single()
+    #run_all()
 
 if __name__ == "__main__":
     main()
