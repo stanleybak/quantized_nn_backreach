@@ -193,8 +193,11 @@ class State():
             delta_q_theta = State.cmd_quantum_list[cmd_out]# * theta1_quantum
             q_theta1 += delta_q_theta
 
-        if mismatch or plot:
+        if plot:
             plt.show()
+
+        if mismatch:
+            print("mismatch in replay... was the chebyshev center radius tiny?")
         else:
             print("witness commands all matched expectation")
 
@@ -589,7 +592,6 @@ def run_all():
         print("\nCounterexample:")
         counterexample.print_replay_init()
         counterexample.print_replay_witness(plot=False)
-        print("replay matches")
 
     if not has_skipped_case:
         diff = time.perf_counter() - global_start_time
