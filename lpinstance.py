@@ -12,6 +12,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 from termcolor import colored
+from timerutil import timed
 
 import swiglpk as glpk
 
@@ -616,6 +617,7 @@ class LpInstance:
             assert basis_type == 'cpx'
             glpk.glp_cpx_basis(self.lp)
 
+    @timed
     def minimize(self, direction_vec, fail_on_unsat=True):
         '''minimize the lp, returning a list of assigments to each of the variables
 

@@ -515,20 +515,19 @@ def make_params():
 
     params_list = []
 
-    # do ownship velovity increasing in outside loop, as highest risk is when ownship vel is low
-    for q_vown in range(qvomin, qvomax):
-        for x_own_start in range(x_own_min, x_own_max):
-            x_own = (x_own_start, x_own_start + 1)
+    # try to do cases that are more likely to be false first
+    for alpha_prev in reversed(range(5)):
+        for q_vint in reversed(range(qvimin, qvimax)):
+            for q_vown in range(qvomin, qvomax):
+                for y_own_start in range(y_own_min, y_own_max):
+                    y_own = (y_own_start, y_own_start + 1)
+                    for x_own_start in range(x_own_min, x_own_max):
+                        x_own = (x_own_start, x_own_start + 1)
 
-            for y_own_start in range(y_own_min, y_own_max):
-                y_own = (y_own_start, y_own_start + 1)
+                        if not is_init_qstate((x_own_start, y_own_start)):
+                            continue
 
-                if not is_init_qstate((x_own_start, y_own_start)):
-                    continue
-
-                for alpha_prev in range(5):
-                    for qtheta1 in range(0, max_qtheta1):
-                        for q_vint in range(qvimin, qvimax):
+                        for qtheta1 in range(0, max_qtheta1):
                             params = (alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint)
                             params_list.append(params)
 
@@ -548,6 +547,9 @@ def run_all():
     global_total_num_cases = len(params_list)
     diff = time.perf_counter() - global_start_time
     print(f"Made params for {global_total_num_cases} cases in {round(diff, 2)} secs")
+
+    print("debug exit")
+    exit(1)
 
     with multiprocessing.Pool() as pool:
         res_list = pool.starmap(backreach_single, params_list)
@@ -586,6 +588,7 @@ def run_all():
         print(f'num_popped: {num_popped}, unique_paths: {unique_paths}, has_counterexample: {unsafe}')
 
     if counterexample is not None:
+        print("\nCounterexample:")
         counterexample.print_replay_init()
         counterexample.print_replay_witness(plot=False)
         print("replay matches")
@@ -602,21 +605,22 @@ def run_single():
 
     print("running single...")
 
-    case_num = 0
+    alpha_prev=3
+    x_own=(0, 1)
+    y_own=(1, 2)
+    qtheta1=105
+    q_vown=2
+    q_vint=7
     plot = False
 
-    if case_num == 0: # counterexample, 79 secs, num popped: 244300, unique paths: 2318
-        alpha_prev=4
-        x_own=(-5, -4)
-        y_own=(-1, 0)
-        qtheta1=0
-        q_vown=1
-        q_vint=9
-
     Timers.tic('top')
-    backreach_single(alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint, plot=plot)
+    res = backreach_single(alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint, plot=plot)
     Timers.toc('top')
     Timers.print_stats()
+
+    if res is not None:
+        print(f"popped: {res['num_popped']}")
+        print(f"unique_paths: {res['unique_paths']}")
 
     plt.show()
 

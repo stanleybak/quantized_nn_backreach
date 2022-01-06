@@ -6,7 +6,7 @@ Quantized Verification of Neural Networks using Backreachability for ACAS Xu
 
 use base image ubuntu 20.04 LTS, c6i.metal instance
 
-ssh -i "sbu_laptop.pem" ubuntu@ec2-34-211-100-0.us-west-2.compute.amazonaws.com
+ssh -i "sbu_laptop.pem" ubuntu@ec2-54-245-212-207.us-west-2.compute.amazonaws.com
 
 sudo apt update
 sudo apt upgrade
@@ -25,7 +25,7 @@ python3 backreach.py (ctrl + c to kill)
 For an persistent process that will keep running when ssh closes, and then shuts down the connection use:
 ~> stdbuf -oL python3 backreach.py >& stdout.txt &
 
-if you also want to shut down the machine when things are done, try this one instead (untested, not sure if it actually stops it: 
+alternatively, if you also want to shut down the machine when things are done, try this one instead (untested, not sure if it actually stops it: 
 ~> (stdbuf -oL python3 backreach.py >& stdout.txt && sudo halt) & 
 
 

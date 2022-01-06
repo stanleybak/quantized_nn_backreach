@@ -7,6 +7,7 @@ Used to replay traces, as a sanity check that things are working correctly
 from functools import lru_cache
 import os
 import math
+import time
 
 import numpy as np
 from scipy import ndimage
@@ -612,7 +613,7 @@ def plot(s, save_mp4=False):
     def animate(f):
         'animate function'
 
-        if (f+1) % 10 == 0:
+        if (f+1) % 10 == 0 and save_mp4:
             print(f"Frame: {f+1} / {num_frames}")
 
         run_index = f // (num_steps + 2 * freeze_frames)
@@ -665,16 +666,15 @@ def main():
     try_without_quantization = False
     
     ###################
-    alpha_prev_list = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0]
-    qtheta1 = 97
-    qv_own = 1
-    qv_int = 3
-    # chebyshev center radius: 0.062114163245700786
-    end = np.array([211.95753641, 448.96479937,  41.61686091,  93.62571348,
-             0.        , 398.89202108])
-    start = np.array([  -232.32944891,  -6504.22433693,    -84.47387174,     57.98191382,
-           -32709.14572853,    398.89202108])
-
+    alpha_prev_list = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0]
+    qtheta1 = 95
+    qv_own = 2
+    qv_int = 7
+    # chebyshev center radius: 0.36299084539392223
+    end = np.array([450.25578487, 499.63700915,  40.48777726,  91.8294835 ,
+             0.        , 399.41569343])
+    start = np.array([  -311.11487203,  -6286.289758  ,    -79.84054366,     60.80626394,
+           -32752.08686133,    399.41569343])
     ##################
 
     skip_checks = True
@@ -683,7 +683,7 @@ def main():
         skip_quantization = True
         skip_checks = True
         #alpha_prev_list = []
-
+        
     q_theta1 = qtheta1 * theta1_quantum + theta1_quantum / 2 
     cmd_list = [0] * (len(alpha_prev_list) - 1)
 
@@ -729,6 +729,7 @@ def main():
 
     if not skip_checks:
 
+        # extra printing on trace
         if False:
             for i, (net, state8, qstate, qinput, cmd_out) in enumerate(s.qinputs):
                 print(f"{i+1}. network {net} with qinput: {tuple(q for q in qinput)} -> {cmd_out}")
@@ -749,7 +750,7 @@ def main():
         assert difference < 1e-2, f"end state mismatch. difference was {difference}"
         print("end states were close enough")
     else:
-        print("skipping end checks")
+        print("WARNING: skipped sanity checks on replay")
         
     # optional: do plot
     plot(s, save_mp4=False)
