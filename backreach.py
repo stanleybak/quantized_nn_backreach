@@ -627,8 +627,8 @@ def main():
 
     State.init_class()
 
-    run_single()
-    #run_all()
+    #run_single()
+    run_all()
 
 if __name__ == "__main__":
     main()
