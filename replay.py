@@ -666,18 +666,17 @@ def main():
     try_without_quantization = False
     
     ###################
-    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 3, 0, 0]
-    qtheta1 = 237
-    qv_own = 3
-    qv_int = 4
-    # chebyshev center radius: 1.3230272400886642e-14
-    end = np.array([ 258.0760963 , -466.01738096,  119.00300104,  -91.31421435,
-              0.        ,  247.20508808])
-    start = np.array([-5009.84346987,   144.61836106,   149.53760006,   -11.76886436,
-           -8899.38317086,   247.20508808])
-
-
+    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0]
+    qtheta1 = 150
+    qv_own = 2
+    qv_int = 6
+    # chebyshev center radius: 0.008967713900563709
+    end = np.array([-237.26730088, -499.99103229,   23.3378827 ,  -97.24769204,
+              0.        ,  347.37848551])
+    start = np.array([ -2883.2227592 ,   7157.87235025,    -68.84805521,    -72.53768449,
+           -33348.33460877,    347.37848551])
     ##################
+
 
     skip_checks = True
         
@@ -720,6 +719,16 @@ def main():
             f"expected {round(q_theta1_deg, 3)}"
 
     init_vec = [start[0], start[1], start[2], start[3], start[4], 0, start[5], 0]
+
+    # run time backwards N seconds
+    rewind_seconds = 0
+
+    if rewind_seconds != 0:
+        a_mat = get_time_elapse_mat(0, -rewind_seconds)
+        init_vec = a_mat @ init_vec
+
+        cmd_list = [cmd_list[0]] * rewind_seconds + cmd_list
+    ########
     
     # run the simulation
     s = State(init_vec, save_states=True)
@@ -753,6 +762,10 @@ def main():
         print("end states were close enough")
     else:
         print("WARNING: skipped sanity checks on replay")
+
+    if rewind_seconds != 0:
+        print(f"commands: {s.commands}")
+        print("WARNING: rewind_seconds != 0")
         
     # optional: do plot
     plot(s, save_mp4=False)
