@@ -63,7 +63,7 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
     if next_index % 200 == 0:
         print(".", end='', flush=True)
 
-    #params = global_params_list[next_index]
+    params = global_params_list[next_index]
     #print(next_index, params)
 
     return next_index, params
@@ -121,8 +121,6 @@ def init_process(q):
     global_process_id = q.get()
 
     Timers.enabled = False
-
-    print(f"in init_process, len(global_params_list) = {len(global_params_list)}")
 
 def print_result(label, res):
     """print info on the passed-in backreach result"""
