@@ -569,7 +569,7 @@ class LpInstance:
         returns a feasible point or None
         '''
 
-        return self.minimize(None, fail_on_unsat=False) is not None
+        return self.minimize(None, fail_on_unsat=False)
 
     def contains_point(self, pt, tol=1e-9):
         '''does this lpi contain the point?

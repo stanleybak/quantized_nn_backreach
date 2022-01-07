@@ -104,14 +104,17 @@ class Star:
 
     @timed
     def is_feasible(self):
-        """is the star feasible?"""
+        """is the star feasible?
+
+        returns None or a feasible point in the domain
+        """
 
         return self.hpoly.is_feasible()
 
     def get_witness(self, print_radius=False):
         """get a witness point of the star, using the Chebeshev center"""
 
-        assert self.hpoly.is_feasible()
+        #assert self.hpoly.is_feasible()
 
         constraints = self.hpoly.get_constraints_csr().toarray()        
         col_bounds = self.hpoly.get_col_bounds()
@@ -170,9 +173,14 @@ class Star:
             print(f"# chebyshev center radius: {res[-1]}")
         
         domain_pt = res[:-1]
-        range_pt = self.a_mat @ domain_pt + self.b_vec
+        range_pt = self.domain_to_range(domain_pt)
 
         return domain_pt, range_pt
+
+    def domain_to_range(self, domain_pt):
+        """convert a domain pt to a range pt"""
+
+        return self.a_mat @ domain_pt + self.b_vec
 
     def minimize_vec(self, vec, return_io=False, fail_on_unsat=True):
         """optimize over this set

@@ -3,6 +3,7 @@ utilities for backreach
 """
 
 from copy import deepcopy
+import os
 
 import numpy as np
 
@@ -10,6 +11,41 @@ from star import Star
 from settings import pos_quantum
 
 from timerutil import timed
+
+def is_init_qx_qy(qx, qy):
+    """is this an initial quantized location?
+
+    returns True if any of the corners is inside the collision circle
+    """
+
+    rv = False
+
+    xs = (qx * pos_quantum, (qx+1) * pos_quantum)
+    ys = (qy * pos_quantum, (qy+1) * pos_quantum)
+
+    # since qstates are algigned with x == 0 and y == 0 lines,
+    # we just need to check if ant of the corners are initial states
+    collision_rad_sq = 500**2
+    epsilon = 1e-6
+
+    for x in xs:
+        for y in ys:
+            dist_sq = x*x + y*y
+            
+            if dist_sq < collision_rad_sq - epsilon:
+                # one of corners was inside collision circle
+                rv = True
+                break
+
+        if rv:
+            break
+
+    return rv
+
+def get_num_cores():
+    """get num cores available for comulation"""
+
+    return len(os.sched_getaffinity(0))
 
 def to_time_str(secs):
     'return a string representation of the number of seconds'

@@ -17,3 +17,4 @@ examples/acasxu/out.txt
 examples/acasxu/results/*
 out.txt
 stdout.txt
+*.pkl

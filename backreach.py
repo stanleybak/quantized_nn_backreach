@@ -2,13 +2,11 @@
 Backreach using quantized inputs
 '''
 
-from typing import List, Tuple, Dict, TypedDict, Optional, Any
+from typing import List, Tuple, Dict, TypedDict, Optional
 
 import time
 from copy import deepcopy
 from math import pi, floor, ceil
-
-import multiprocessing
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,42 +14,12 @@ import matplotlib.pyplot as plt
 from star import Star
 from plotting import Plotter
 from dubins import init_to_constraints, get_time_elapse_mat
-from util import make_qstar, to_time_str
+from util import make_qstar, is_init_qx_qy
 from networks import get_cmd
 
 from timerutil import timed, Timers
-from settings import pos_quantum, vel_quantum, theta1_quantum
-
-
-shared_completed_array = None # assigned after we get the number of cases
-global_params_list = [] # assigned after we get params made
-
-shared_num_counterexamples = multiprocessing.Value('i', 0) # for syncing multiple processes to exit
-shared_num_completed = multiprocessing.Value('i', 0) # for syncing multiple processes to print updated progress
-global_total_num_cases = -1 # gets set once
-global_start_time = 0.0
-
-def increment_progress():
-    """increment global progress (and possibly print update)"""
-
-    completed = -1
-
-    with shared_num_completed.get_lock():
-        shared_num_completed.value += 1
-        completed = shared_num_completed.value
-    
-    if completed % 10000 == 1:
-        # print progress
-        
-        percent = 100 * completed / global_total_num_cases
-        elapsed = time.perf_counter() - global_start_time
-        eta = elapsed * global_total_num_cases / (completed + 1) - elapsed
-
-        print(f"\n{round(percent, 2)}% Elapsed: {to_time_str(elapsed)}, ETA: {to_time_str(eta)} " + \
-              f"{completed}/{global_total_num_cases}: ", end='', flush=True)
-    else:
-        if completed % 200 == 0:
-            print(".", end='', flush=True)
+from settings import theta1_quantum, pos_quantum
+from parallel import run_all_parallel, increment_index, shared_num_counterexamples
 
 class State():
     """state of backreach container
@@ -89,13 +57,10 @@ class State():
         self.qv_int = qv_int      
         
         self.alpha_prev_list = [alpha_prev]
-
-        if State.debug:
-            self.qstate_star_list = []
-        else:
-            self.qstate_star_list = None
         
         self.star = star
+        self.domain_witness = star.is_feasible()
+        assert self.domain_witness is not None
         
         self.state_id = -1
         self.assign_state_id()
@@ -104,10 +69,11 @@ class State():
         return f"State(id={self.state_id} with alpha_prev_list = {self.alpha_prev_list})"
 
     @timed
-    def copy(self, new_star=None):
+    def copy(self, new_star=None, new_domain_witness=None):
         """return a deep copy of self"""
 
         if new_star is not None:
+            assert new_domain_witness is not None
             self_star = self.star
             self.star = None
 
@@ -116,6 +82,7 @@ class State():
 
         if new_star is not None:
             rv.star = new_star
+            rv.domain_witness = new_domain_witness
             
             # restore self.star
             self.star = self_star
@@ -141,25 +108,6 @@ class State():
         p = Plotter()
 
         print()
-
-        if State.debug:
-            step = 0
-            for i in range(len(s.qstate_star_list) - 1, -1, -1):
-                step += 1
-                qstate, star = s.qstate_star_list[i]
-
-                print(f"{step}. network {s.alpha_prev_list[i+1]} with qstate: {qstate} " + \
-                      f"gave cmd {s.alpha_prev_list[i]}")
-
-                #pt = star.get_witness(print_radius=True)[1]
-                # quantize witness
-                #dx = floor((pt[Star.X_INT] - pt[Star.X_OWN]) / pos_quantum)
-                #dy = floor((0 - pt[Star.Y_OWN]) / pos_quantum)
-                #print(f"quantized witness: {dx, dy}")
-
-                p.plot_star(star, color='magenta')
-
-            print()
 
         pt = range_pt.copy()
         
@@ -275,10 +223,10 @@ class State():
                     qstate = (qdx, qdy)
 
                     # skip predecessors that are also initial states
-                    if is_init_qstate(qstate):
+                    if is_init_qx_qy(qdx, qdy):
                         continue
 
-                    out_cmd = get_cmd(prev_cmd, *qstate, *constants)
+                    out_cmd = get_cmd(prev_cmd, qdx, qdy, *constants)
 
                     qstate_to_cmd[qstate] = out_cmd
 
@@ -294,51 +242,40 @@ class State():
             if all_wrong:
                 continue
             
-            # for the current prev_command, was either all correct or all wrong?
+            # no splitting; all correct
             if all_right:
                 prev_s = self.copy()
                 prev_s.alpha_prev_list.append(prev_cmd)
 
-                if State.debug:
-                    tup = (correct_qstates, deepcopy(prev_s.star))
-                    prev_s.qstate_star_list.append(tup)
-                
                 rv.append(prev_s)
                 continue
 
-            # still have a chance at all correct: if incorrect state are infeasible
+            # still have a chance at all correct (no splitting): if all incorrect state are infeasible
             all_incorrect_infeasible = True
 
             for qstate in incorrect_qstates:
-                # if incorrect commands
                 star = make_qstar(self.star, qstate)
 
-                if star.is_feasible():
+                if star.is_feasible() is not None:
                     all_incorrect_infeasible = False
                     break
 
+            # no splitting; all incorrect states were infeasible
             if all_incorrect_infeasible:
                 prev_s = self.copy()
                 prev_s.alpha_prev_list.append(prev_cmd)
 
-                if State.debug:
-                    tup = (correct_qstates, deepcopy(prev_s.star))
-                    prev_s.qstate_star_list.append(tup)
-                
                 rv.append(prev_s)
                 continue
 
-            # ok, do splitting if command is correct
+            # need to split based on if command is correct
             for qstate in correct_qstates:
                 star = make_qstar(self.star, qstate)
-
-                if star.is_feasible():
-                    prev_s = self.copy(star)
+                domain_witness = star.is_feasible()
+                
+                if domain_witness is not None:
+                    prev_s = self.copy(star, domain_witness)
                     prev_s.alpha_prev_list.append(prev_cmd)
-
-                    if State.debug:
-                        tup = (qstate, deepcopy(prev_s.star))
-                        prev_s.qstate_star_list.append(tup)
 
                     rv.append(prev_s)
 
@@ -374,58 +311,25 @@ class State():
 
         return dx_qrange, dy_qrange
 
-def is_init_qstate(qstate):
-    """is this an initial qstate?
-
-    returns True if any of the corners is inside the collision circle
-    """
-
-    rv = False
-    qx, qy = qstate
-
-    xs = (qx * pos_quantum, (qx+1) * pos_quantum)
-    ys = (qy * pos_quantum, (qy+1) * pos_quantum)
-
-    # since qstates are algigned with x == 0 and y == 0 lines,
-    # we just need to check if ant of the corners are initial states
-    collision_rad_sq = 500**2
-    epsilon = 1e-6
-
-    for x in xs:
-        for y in ys:
-            dist_sq = x*x + y*y
-            
-            if dist_sq < collision_rad_sq - epsilon:
-                # one of corners was inside collision circle
-                rv = True
-                break
-
-        if rv:
-            break
-
-    return rv
-
 class BackreachResult(TypedDict):
     counterexample: Optional[State]
     runtime: float
     num_popped: int
     unique_paths: int
-    #params: Tuple[int, Tuple[int, int], Tuple[int, int], int, int, int]
+    index: int
+    params: Tuple[int, int, int, int, int, int]
 
-def backreach_single(_, plot=False) -> Optional[BackreachResult]:
+def backreach_single(arg, parallel=True, plot=False) -> Optional[BackreachResult]:
     """run backreachability from a single symbolic state"""
 
-    index = increment_index()
-    print("WORKING HERE REWORK FuncTION, RENAME, AND UPDATE PROGRESS AT THE END")
-    print("ENSURE THINGS ARE CHECKED IN ORDER")
-    print("MAYBE BETTER WAY TO DO THIS, USE one int index per process")
+    if parallel:
+        index, params = increment_index()
+    else:
+        assert arg is not None
+        index = 0
+        params = arg
 
-    init_alpha_prev, x_own, y_own, theta1, v_own, v_int = __;
-
-    global shared_num_counterexamples
-
-    if shared_num_counterexamples.value > 0:
-        return None
+    init_alpha_prev, x_own, y_own, theta1, v_own, v_int = params
 
     start = time.perf_counter()
 
@@ -434,16 +338,11 @@ def backreach_single(_, plot=False) -> Optional[BackreachResult]:
     init_star = Star(box, a_mat, b_vec)
     init_s = State(init_alpha_prev, theta1, v_own, v_int, init_star)
 
-    #p = Plotter()
-    #p.plot_star(init_s.star)
-
     work = [init_s]
-    #colors = ['b', 'lime', 'r', 'g', 'magenta', 'cyan', 'pink']
     popped = 0
 
-    #params = (init_alpha_prev, x_own, y_own, theta1, v_own, v_int)
-    rv: BackreachResult = {'counterexample': None, 'runtime': np.inf,
-                           'num_popped': 0, 'unique_paths': 0}
+    rv: BackreachResult = {'counterexample': None, 'runtime': np.inf, 'params': params,
+                           'num_popped': 0, 'unique_paths': 0, 'index': index}
     deadends = set()
 
     plotter: Optional[Plotter] = None
@@ -458,14 +357,7 @@ def backreach_single(_, plot=False) -> Optional[BackreachResult]:
             print("break because of counterexample")
             break
 
-        if popped % 100 == 0:
-            if shared_num_counterexamples.value > 0:
-                # don't need lock since we're just reading
-                print("break because shared num_counterexamples > 0")
-                break
-        
         s = work.pop()
-        #print(f"{popped}: {s.alpha_prev_list}")
         popped += 1
 
         predecessors = s.get_predecessors(plotter=plotter)
@@ -474,28 +366,27 @@ def backreach_single(_, plot=False) -> Optional[BackreachResult]:
             work.append(p)
             
             if p.alpha_prev_list[-2] == 0 and p.alpha_prev_list[-1] == 0:
-                _domain_pt, pt = p.star.get_witness()
+                # also check if > 20000 ft
+                domain_pt = p.domain_witness
+                assert domain_pt is not None
+                pt = p.star.domain_to_range(domain_pt)
 
                 dx = (pt[Star.X_INT] - pt[Star.X_OWN])
                 dy = (0 - pt[Star.Y_OWN])
-                # > 20000 ft
                 
                 if dx**2 + dy**2 > 10000**2:
                     rv['counterexample'] = deepcopy(p)
 
-                    with shared_num_counterexamples.get_lock():
-                        shared_num_counterexamples.value += 1
+                    if parallel:
+                        with shared_num_counterexamples.get_lock():
+                            shared_num_counterexamples.value += 1
+                            print(f"\nIndex {index}. found Counterexample (count: {shared_num_counterexamples.value}) ",
+                                  end='', flush=True)
 
                     break
 
         if not predecessors:
             deadends.add(tuple(s.alpha_prev_list))
-
-    #print(f"num popped: {popped}")
-    #print(f"unique paths: {len(deadends)}")
-
-    #for i, path in enumerate(deadends):
-    #    print(f"{i+1}: {path}")
 
     diff = time.perf_counter() - start
     rv['runtime'] = diff
@@ -504,134 +395,7 @@ def backreach_single(_, plot=False) -> Optional[BackreachResult]:
 
     return rv
 
-def make_params():
-    """make params for parallel run"""
-
-    vel_ownship = (100, 1200)
-    #vel_intruder = (0, 1200) # full range
-    vel_intruder = (0, 400)
-
-    assert -500 % pos_quantum < 1e-6
-    assert 500 % pos_quantum < 1e-6
-
-    x_own_min = round(-500 / pos_quantum)
-    x_own_max = round(500 / pos_quantum)
-
-    y_own_min = round(-500 / pos_quantum)
-    y_own_max = round(500 / pos_quantum)
-
-    max_qtheta1 = round(2*pi / theta1_quantum)
-
-    qvimin = round(vel_intruder[0]/vel_quantum)
-    qvimax = round(vel_intruder[1]/vel_quantum)
-
-    qvomin = round(vel_ownship[0]/vel_quantum)
-    qvomax = round(vel_ownship[1]/vel_quantum)
-
-    for i in range(2):
-        assert vel_ownship[i] % vel_quantum < 1e-6
-        assert vel_intruder[i] % vel_quantum < 1e-6
-
-    params_list = []
-
-    # try to do cases that are more likely to be false first
-    for alpha_prev in reversed(range(5)):
-        for q_vint in reversed(range(qvimin, qvimax)):
-            for q_vown in range(qvomin, qvomax):
-                for y_own_start in range(y_own_min, y_own_max):
-                    y_own = (y_own_start, y_own_start + 1)
-                    for x_own_start in range(x_own_min, x_own_max):
-                        x_own = (x_own_start, x_own_start + 1)
-
-                        if not is_init_qstate((x_own_start, y_own_start)):
-                            continue
-
-                        for qtheta1 in range(0, max_qtheta1):
-                            params = (alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint)
-                            params_list.append(params)
-
-    return params_list
-
-def run_all():
-    """loop over all cases"""
-
-    global global_total_num_cases
-    global global_start_time
-    global global_params_list
-    global shared_completed_array
-
-    # shared variable for coordination
-    start = time.perf_counter()
-    global_params_list = make_params()
-    diff = time.perf_counter() - start
-    print(f"Made params for {global_total_num_cases} cases in {round(diff, 2)} secs")
-
-    global_total_num_cases = len(global_params_list)
-    shared_completed_array = multiprocessing.Array('b', global_total_num_cases)
-    
-    global_start_time = time.perf_counter()
-
-    with multiprocessing.Pool() as pool:
-        res_list = pool.map(backreach_single, range(global_total_num_cases))
-        max_runtime_result_params = (-np.inf, None, None)
-        total_runtime = 0.0
-        has_skipped_case = False
-        counterexample_res = None
-
-        for params, res in zip(params_list, res_list):
-            if res is None:
-                has_skipped_case = True
-                continue
-
-            if res['counterexample'] is not None:
-                print("!!!!! counterexample!!!!")
-                counterexample_res = res
-                break
-
-            t = res['runtime']
-            total_runtime += t
-
-            if t > max_runtime_result_params[0]:
-                max_runtime_result_params = (t, res, params)
-
-    if max_runtime_result_params[1] is not None and max_runtime_result_params[2] is not None:
-        diff = max_runtime_result_params[0]
-        res = max_runtime_result_params[1]
-        alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint = max_runtime_result_params[2] 
-        
-        num_popped = res['num_popped']
-        unique_paths = res['unique_paths']
-        unsafe = res['counterexample'] is not None
-
-        print(f"\nlongest runtime ({round(diff, 2)}) for:\nalpha_prev={alpha_prev}\nx_own={x_own}\n" + \
-              f"y_own={y_own}\nqtheta1={qtheta1}\nq_vown={q_vown}\nq_vint={q_vint}")
-        print(f'num_popped: {num_popped}, unique_paths: {unique_paths}, has_counterexample: {unsafe}')
-
-    if counterexample_res is not None:
-        counterexample = counterexample_res['counterexample']
-        assert counterexample is not None
-        
-        print("\nCounterexample:")
-        counterexample.print_replay_init()
-        counterexample.print_replay_witness(plot=False)
-
-        res = counterexample_res
-        num_popped = res['num_popped']
-        unique_paths = res['unique_paths']
-        runtime = res['runtime']
-        unsafe = res['counterexample'] is not None
-        
-        print(f'num_popped: {num_popped}, unique_paths: {unique_paths}, has_counterexample: {unsafe}, ' + \
-              f'runtime: {runtime}')
-
-    if not has_skipped_case:
-        diff = time.perf_counter() - global_start_time
-        print(f"\nfinished enumeration ({global_total_num_cases} cases) in {to_time_str(diff)}")
-        print(f"Avg runtime per case: {to_time_str(total_runtime / global_total_num_cases)}")
-    else:
-        print("\nIncomplete analysis; skipped some cases.")
-
-def run_single():
+def run_single_case():
     """test a single (difficult) case"""
 
     print("running single...")
@@ -645,7 +409,8 @@ def run_single():
     #num_popped: 1043422, unique_paths: 5551, has_counterexample: False
 
     Timers.tic('top')
-    res = backreach_single(alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint, plot=False)
+    params = (alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint)
+    res = backreach_single(params, parallel=False, plot=False)
     Timers.toc('top')
     Timers.print_stats()
 
@@ -660,8 +425,8 @@ def main():
 
     State.init_class()
 
-    #run_single()
-    run_all()
+    #run_single_case()
+    run_all_parallel(backreach_single)
 
 if __name__ == "__main__":
     main()

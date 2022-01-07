@@ -13,20 +13,20 @@ from scipy.linalg import expm
 from star import Star
 from settings import pos_quantum, vel_quantum, theta1_quantum
 
-def init_to_constraints(qx: Tuple[int, int], qy: Tuple[int, int],
+def init_to_constraints(qx: int, qy: int,
                         qv_own_min: int, qv_int_min: int, qtheta1_min: int):
     """convert initial variables to box bounds and constraints in linear space
 
     returns box, a_mat, b_vec with Ax <= b constraints
     """
 
-    rv: List[Tuple[float, float]] = []
+    box: List[Tuple[float, float]] = []
     a_mat: List[List[float]] = []
     b_vec: List[float] = []
 
     # convert to float ranges for box
-    x = (qx[0] * pos_quantum, qx[1] * pos_quantum)
-    y = (qy[0] * pos_quantum, qy[1] * pos_quantum)
+    x = qx * pos_quantum, (qx + 1) * pos_quantum
+    y = qy * pos_quantum, (qy + 1) * pos_quantum
 
     qv_own = qv_own_min, qv_own_min + 1
     qv_int = qv_int_min, qv_int_min + 1
@@ -36,8 +36,8 @@ def init_to_constraints(qx: Tuple[int, int], qy: Tuple[int, int],
     v_int = (qv_int[0] * vel_quantum, qv_int[1] * vel_quantum)
     theta1 = (qtheta1[0] * theta1_quantum, qtheta1[1] * theta1_quantum)
 
-    rv.append(x)
-    rv.append(y)
+    box.append(x)
+    box.append(y)
 
     # compute vx and vy from theta1 and v_own
     tol = 1e-9
@@ -56,8 +56,8 @@ def init_to_constraints(qx: Tuple[int, int], qy: Tuple[int, int],
             vx.append(cos(theta1_scalar) * v_own_scalar)
             vy.append(sin(theta1_scalar) * v_own_scalar)
 
-    rv.append((min(vx), max(vx)))
-    rv.append((min(vy), max(vy)))
+    box.append((min(vx), max(vx)))
+    box.append((min(vy), max(vy)))
 
     # make pie constraints
 
@@ -103,10 +103,10 @@ def init_to_constraints(qx: Tuple[int, int], qy: Tuple[int, int],
     b_vec.append(v_own[1])
 
     ############
-    rv.append((0.0, 0.0)) # x_int
-    rv.append(v_int) # vx_int
+    box.append((0.0, 0.0)) # x_int
+    box.append(v_int) # vx_int
 
-    return rv, a_mat, b_vec
+    return box, a_mat, b_vec
 
 @lru_cache(maxsize=None)
 def get_time_elapse_mat(command1, dt):
