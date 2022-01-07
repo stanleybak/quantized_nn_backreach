@@ -36,7 +36,7 @@ def increment_progress():
         shared_num_completed.value += 1
         completed = shared_num_completed.value
     
-    if completed % 1000 == 1:
+    if completed % 10000 == 1:
         # print progress
         
         percent = 100 * completed / global_total_num_cases
@@ -46,7 +46,7 @@ def increment_progress():
         print(f"\n{round(percent, 2)}% Elapsed: {to_time_str(elapsed)}, ETA: {to_time_str(eta)} " + \
               f"{completed}/{global_total_num_cases}: ", end='', flush=True)
     else:
-        if completed % 20 == 0:
+        if completed % 200 == 0:
             print(".", end='', flush=True)
 
 class State():
