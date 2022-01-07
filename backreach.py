@@ -6,7 +6,7 @@ from typing import List, Tuple, Dict, TypedDict, Optional
 
 import time
 from copy import deepcopy
-from math import pi, floor, ceil
+from math import floor, ceil
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,7 +18,7 @@ from util import make_qstar, is_init_qx_qy
 from networks import get_cmd
 
 from timerutil import timed, Timers
-from settings import theta1_quantum, pos_quantum
+from settings import Quanta
 from parallel import run_all_parallel, increment_index, shared_num_counterexamples
 
 class State():
@@ -32,21 +32,6 @@ class State():
 
     nn_update_rate = 1.0
     next_state_id = 0
-
-    cmd_quantum_list: List[int] = [] # [0, 1, -1, 2, -2]
-
-    @classmethod
-    def init_class(cls):
-        '''init class variables'''
-        
-        q = 2*pi / (360 / 1.5)
-        assert theta1_quantum * round(q/theta1_quantum) - q < 1e-6
-        assert not State.cmd_quantum_list
-
-        # initialize
-        q = 2*pi / (360 / 1.5)
-        cls.cmd_quantum_list = [0, round(q/theta1_quantum), -1 * round(q/theta1_quantum),
-                                         2 * round(q/theta1_quantum), -2 * round(q/theta1_quantum)]
 
     def __init__(self, alpha_prev: int, qtheta1: int, qv_own: int, qv_int: int, \
                  star: Star):
@@ -117,6 +102,8 @@ class State():
         p.plot_star(s.star, color='r')
         mismatch = False
 
+        pos_quantum = Quanta.pos
+
         for i in range(len(s.alpha_prev_list) - 1):
             net = s.alpha_prev_list[-(i+1)]
             expected_cmd = s.alpha_prev_list[-(i+2)]
@@ -142,7 +129,7 @@ class State():
             mat = get_time_elapse_mat(cmd_out, 1.0)
             pt = mat @ pt
 
-            delta_q_theta = State.cmd_quantum_list[cmd_out]# * theta1_quantum
+            delta_q_theta = Quanta.cmd_quantum_list[cmd_out]# * theta1_quantum
             q_theta1 += delta_q_theta
 
         if plot:
@@ -180,7 +167,7 @@ class State():
         self.star.b_vec = mat @ self.star.b_vec
 
         # clear, weak left, weak right, strong left, strong right
-        delta_q_theta = State.cmd_quantum_list[cmd]
+        delta_q_theta = Quanta.cmd_quantum_list[cmd]
 
         if forward:
             self.qtheta1 += delta_q_theta
@@ -285,6 +272,7 @@ class State():
     def get_dx_dy_qrange(self, stdout=False) -> Tuple[Tuple[int, int], Tuple[int, int]]:
         """get the quantized range for (dx, dy)"""
 
+        pos_quantum = Quanta.pos
         vec = np.zeros(Star.NUM_VARS)
 
         # dx = x_int - x_own
@@ -423,10 +411,12 @@ def run_single_case():
 def main():
     """main entry point"""
 
-    State.init_class()
+    Quanta.init_cmd_quantum_list()
 
     #run_single_case()
-    run_all_parallel(backreach_single)
+    run_all_parallel(backreach_single, index=373)
 
+
+    # 373.
 if __name__ == "__main__":
     main()

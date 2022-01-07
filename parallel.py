@@ -10,7 +10,7 @@ import multiprocessing
 import pickle
 from math import pi
 
-from settings import pos_quantum, vel_quantum, theta1_quantum
+from settings import Quanta
 from util import to_time_str, get_num_cores, is_init_qx_qy
 from timerutil import Timers
 
@@ -37,28 +37,32 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
         shared_cur_index[global_process_id] = next_index
         shared_cur_index_start_time[global_process_id] = now
 
-    if next_index % 10000 == 0:
-        # print longest-running job
-        longest: Tuple[float, int] = (now - shared_cur_index_start_time[0], 0)
+        if next_index % 10000 == 0:
+            if next_index == 0:
+                for i in range(get_num_cores()):
+                    shared_cur_index_start_time[0] = now
 
-        for i in range(get_num_cores()):
-            cur: Tuple[float, int] = (now - shared_cur_index_start_time[i], i)
+            # print longest-running job
+            longest: Tuple[float, int] = (now - shared_cur_index_start_time[0], 0)
 
-            if cur > longest:
-                longest = cur
+            for i in range(get_num_cores()):
+                cur: Tuple[float, int] = (now - shared_cur_index_start_time[i], i)
 
-        runtime, index = longest
+                if cur > longest:
+                    longest = cur
 
-        print(f"\nLongest Running Job: index={index} ({round(runtime, 2)}s)")
+            runtime, index = longest
 
-        # print progress
-        num_cases = len(global_params_list)
-        percent = 100 * next_index / num_cases
-        elapsed = time.perf_counter() - global_start_time
-        eta = elapsed * num_cases / (next_index + 1) - elapsed
+            print(f"\nLongest Running Job: index={index} ({round(runtime, 2)}s)")
 
-        print(f"{round(percent, 2)}% Elapsed: {to_time_str(elapsed)}, ETA: {to_time_str(eta)} " + \
-              f"{next_index}/{num_cases}: ", end='', flush=True)
+            # print progress
+            num_cases = len(global_params_list)
+            percent = 100 * next_index / num_cases
+            elapsed = time.perf_counter() - global_start_time
+            eta = elapsed * num_cases / (next_index + 1) - elapsed
+
+            print(f"{round(percent, 2)}% Elapsed: {to_time_str(elapsed)}, ETA: {to_time_str(eta)} " + \
+                  f"{next_index}/{num_cases}: ", end='', flush=True)
 
     if next_index % 200 == 0:
         print(".", end='', flush=True)
@@ -74,6 +78,10 @@ def make_params():
     vel_ownship = (100, 1200)
     #vel_intruder = (0, 1200) # full range
     vel_intruder = (0, 400)
+
+    pos_quantum = Quanta.pos
+    vel_quantum = Quanta.vel
+    theta1_quantum = Quanta.theta1
 
     assert -500 % pos_quantum < 1e-6
     assert 500 % pos_quantum < 1e-6
@@ -126,7 +134,7 @@ def print_result(label, res):
     """print info on the passed-in backreach result"""
 
     diff = res['runtime']
-    index = res['index]']
+    index = res['index']
     alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint = global_params_list[index]
 
     num_popped = res['num_popped']
@@ -137,7 +145,7 @@ def print_result(label, res):
           f"y_own={y_own}\nqtheta1={qtheta1}\nq_vown={q_vown}\nq_vint={q_vint}")
     print(f'num_popped: {num_popped}, unique_paths: {unique_paths}, has_counterexample: {unsafe}')
 
-def get_counterexamples(backreach_single):
+def get_counterexamples(backreach_single, index=None):
     """get all counterexamples at the current quantization"""
 
     global global_start_time
@@ -147,7 +155,10 @@ def get_counterexamples(backreach_single):
     start = time.perf_counter()
     global_params_list = make_params()
     diff = time.perf_counter() - start
-    
+
+    if index is not None:
+        global_params_list = [global_params_list[index]]
+
     num_cases = len(global_params_list)
     print(f"Made params for {num_cases} cases in {round(diff, 2)} secs")
     
@@ -162,7 +173,7 @@ def get_counterexamples(backreach_single):
 
     with multiprocessing.Pool(get_num_cores(), initializer=init_process, initargs=(q, )) as pool:
         res_list = pool.map(backreach_single, range(num_cases))
-        max_runtime = res_list[1]
+        max_runtime = res_list[0]
 
         for res in res_list:
             if res['counterexample'] is not None:
@@ -175,8 +186,8 @@ def get_counterexamples(backreach_single):
                 max_runtime = res
 
     diff = time.perf_counter() - global_start_time
-    print(f"\nfinished enumeration ({num_cases} cases) in {to_time_str(diff)}\n" + \
-          f"({len(counterexamples)}) counterexamples")
+    print(f"\nfinished enumeration ({num_cases} cases) in {to_time_str(diff)}, " + \
+          f"counterexamples: {len(counterexamples)}")
     print(f"Avg runtime per case: {to_time_str(total_runtime / num_cases)}")
 
     return counterexamples, max_runtime
@@ -192,10 +203,58 @@ def save_counterexamples(counterexamples, filename):
 
     print(f"Saved {len(counterexamples)} counterexamples ({round(mb, 3)} MB) to {filename}")
 
-def run_all_parallel(backreach_single):
+def refine_counterexamples(counterexamples, level=0):
+    """refine counterexamples
+
+    returns True if refinement is safe
+    """
+
+    rv = True
+    qstates = [] # qstates after refinement
+
+    levels = ['pos', 'vel', 'pos', 'vel', 'pos', 'vel', 'theta1']
+
+    if level >= len(levels):
+        print("Refinement reached max level")
+        rv = False
+    else:
+        if levels[level] == 'pos':
+            print(f"Level {level}: refining q_pos from {Quanta.pos} to {Quanta.pos / 2}")
+            Quanta.pos /= 2
+        elif levels[level] == 'vel':
+            print(f"Level {level}: refining q_vel from {Quanta.vel} to {Quanta.vel / 2}")
+            Quanta.vel /= 2
+        elif levels[level] == 'theta1':
+            print(f"Level {level}: refining q_theta1 from {Quanta.theta1_deg} to {Quanta.theta1_deg / 2}")
+            Quanta.theta1_deg /= 2
+            Quanta.theta1 /= 2
+            Quanta.init_cmd_quantum_list() # since theta1 was changed
+        
+        for counterexample in counterexamples:
+            if is_real_counterexample(counterexample):
+                print(f"Found reach counterexample at state: {counterexample}")
+                rv = False
+                break
+
+            # (alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint)
+            alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint = counterexample['params']
+
+            # add refined states to qstates_after_refinement
+            if levels[level] == 'pos':
+                qstates.append((alpha_prev, 2*x_own, 2*y_own, qtheta1, q_vown, q_vint))
+                qstates.append((alpha_prev, 2*x_own + 1, 2*y_own, qtheta1, q_vown, q_vint))
+                qstates.append((alpha_prev, 2*x_own, 2*y_own + 1, qtheta1, q_vown, q_vint))
+                qstates.append((alpha_prev, 2*x_own + 1, 2*y_own + 1, qtheta1, q_vown, q_vint))
+            elif levels[level] == 'vel':
+                print("!!!!!!!!!! WORKING HERE !!!!!!!!!!!!!!")
+                HERE!!!!!!!!!!!!!!!!!!!!!
+
+    return rv
+
+def run_all_parallel(backreach_single, index=None):
     """loop over all cases"""
 
-    counterexamples, max_runtime = get_counterexamples(backreach_single)
+    counterexamples, max_runtime = get_counterexamples(backreach_single, index=index)
 
     print()
     print_result('longest runtime', max_runtime)
@@ -203,15 +262,22 @@ def run_all_parallel(backreach_single):
     for i, counterexample_res in enumerate(counterexamples):
         counterexample = counterexample_res['counterexample']
         
-        print("\nCounterexample {i}:")
+        print(f"\nCounterexample {i}:")
         counterexample.print_replay_init()
         counterexample.print_replay_witness(plot=False)
 
         print_result(f"Counterexample {i}", counterexample_res)
-        
-    if counterexamples:
-        print("\nIncomplete analysis; had counterexamples.")
 
-        save_counterexamples(counterexamples, 'counterexamples.pkl')
+    if index is None:
+        if counterexamples:
+            print("\nIncomplete analysis; had counterexamples.")
+
+            save_counterexamples(counterexamples, 'counterexamples.pkl')
+        else:
+            print("\nDone! No counterexamples.")
     else:
-        print("\nDone! No counterexamples.")
+        print(f"Finished with index: {index}")
+
+    if counterexamples:
+        safe = refine_counterexamples(counterexamples)
+        print(f"Proven safe after refining: {safe}")
