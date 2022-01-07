@@ -22,6 +22,10 @@ from networks import get_cmd
 from timerutil import timed, Timers
 from settings import pos_quantum, vel_quantum, theta1_quantum
 
+
+shared_completed_array = None # assigned after we get the number of cases
+global_params_list = [] # assigned after we get params made
+
 shared_num_counterexamples = multiprocessing.Value('i', 0) # for syncing multiple processes to exit
 shared_num_completed = multiprocessing.Value('i', 0) # for syncing multiple processes to print updated progress
 global_total_num_cases = -1 # gets set once
@@ -408,9 +412,15 @@ class BackreachResult(TypedDict):
     unique_paths: int
     #params: Tuple[int, Tuple[int, int], Tuple[int, int], int, int, int]
 
-def backreach_single(init_alpha_prev: int, x_own: Tuple[int, int], y_own: Tuple[int, int],
-                     theta1: int, v_own: int, v_int: int, plot=False) -> Optional[BackreachResult]:
+def backreach_single(_, plot=False) -> Optional[BackreachResult]:
     """run backreachability from a single symbolic state"""
+
+    index = increment_index()
+    print("WORKING HERE REWORK FuncTION, RENAME, AND UPDATE PROGRESS AT THE END")
+    print("ENSURE THINGS ARE CHECKED IN ORDER")
+    print("MAYBE BETTER WAY TO DO THIS, USE one int index per process")
+
+    init_alpha_prev, x_own, y_own, theta1, v_own, v_int = __;
 
     global shared_num_counterexamples
 
@@ -492,8 +502,6 @@ def backreach_single(init_alpha_prev: int, x_own: Tuple[int, int], y_own: Tuple[
     rv['num_popped'] = popped
     rv['unique_paths'] = len(deadends)
 
-    increment_progress()
-
     return rv
 
 def make_params():
@@ -549,18 +557,22 @@ def run_all():
 
     global global_total_num_cases
     global global_start_time
+    global global_params_list
+    global shared_completed_array
 
     # shared variable for coordination
     start = time.perf_counter()
-    params_list = make_params()
-
-    global_total_num_cases = len(params_list)
+    global_params_list = make_params()
     diff = time.perf_counter() - start
     print(f"Made params for {global_total_num_cases} cases in {round(diff, 2)} secs")
+
+    global_total_num_cases = len(global_params_list)
+    shared_completed_array = multiprocessing.Array('b', global_total_num_cases)
+    
     global_start_time = time.perf_counter()
 
     with multiprocessing.Pool() as pool:
-        res_list = pool.starmap(backreach_single, params_list)
+        res_list = pool.map(backreach_single, range(global_total_num_cases))
         max_runtime_result_params = (-np.inf, None, None)
         total_runtime = 0.0
         has_skipped_case = False
