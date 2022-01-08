@@ -87,7 +87,7 @@ def worker_had_counterexample(res):
 
     shared_counterexamples_list.append(res['index'])
 
-def make_params():
+def make_params(max_index=None):
     """make params for parallel run"""
 
     vel_ownship = (100, 1200)
@@ -123,8 +123,17 @@ def make_params():
 
     # try to do cases that are more likely to be false first
     for alpha_prev in reversed(range(5)):
+        if max_index is not None and len(params_list) > max_index:
+            break
+        
         for q_vint in reversed(range(qvimin, qvimax)):
+            if max_index is not None and len(params_list) > max_index:
+                break
+        
             for q_vown in range(qvomin, qvomax):
+                if max_index is not None and len(params_list) > max_index:
+                    break
+        
                 for y_own in range(y_own_min, y_own_max):
                     for x_own in range(x_own_min, x_own_max):
 
@@ -179,11 +188,13 @@ def get_counterexamples(backreach_single, index=None, params=None):
     else:
         print("Making params...")
         start = time.perf_counter()
-        global_params_list = make_params()
+        global_params_list = make_params(index)
         diff = time.perf_counter() - start
 
         if index is not None:
-            global_params_list = [global_params_list[index]]
+            print("WARNING: using UP TO INDEX")
+            time.sleep(2)
+            global_params_list = global_params_list[:index+1]
 
         num_cases = len(global_params_list)
         print(f"Made params for {num_cases} cases in {round(diff, 2)} secs")
@@ -280,7 +291,7 @@ def is_real_counterexample(res):
             print(f"Quantized mismatch at step {i+1}. got cmd {q_cmd_out}, expected cmd {expected_cmd}")
             mismatch_quantized = True
 
-        if c_cmd_out != expected_cmd:
+        if c_cmd_out != expected_cmd and not mismatch_continuous:
             print(f"Non-quantized mismatch at step {i+1}/{len(s.alpha_prev_list) - 1}. " + \
                   f"got cmd {c_cmd_out}, expected cmd {expected_cmd}")
             mismatch_continuous = True
@@ -299,6 +310,9 @@ def is_real_counterexample(res):
     if not mismatch_quantized:
         print("Quantized replay matched")
 
+    if not mismatch_continuous:
+        print("Continuous replay matched")
+
     return not mismatch_continuous
 
 def refine_counterexamples(backreach_single, counterexamples, level=0):
@@ -307,7 +321,7 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
     returns True if refinement is safe
     """
 
-    print(f"\n####### refine counterexamples with {len(counterexamples)} ######")
+    print(f"\n####### level {level}: Refining {len(counterexamples)} counterexamples ######")
 
     # need to do this check before refining quanta
     for i, counterexample in enumerate(counterexamples):
