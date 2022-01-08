@@ -514,6 +514,7 @@ def run_single_case(backreach_single, index, plot=False):
         print(f"popped: {res['num_popped']}")
         print(f"unique_paths: {res['unique_paths']}")
         print(f"counterexample: {res['counterexample'] is not None}")
+        print(f"timeout: {res['timeout']}")
 
     if plot:
         plt.show()
