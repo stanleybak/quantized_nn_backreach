@@ -26,7 +26,7 @@ For an persistent process that will keep running when ssh closes, and then shuts
 ~> stdbuf -oL python3 backreach.py >& stdout.txt &
 
 alternatively, if you also want to shut down the machine when things are done, try this one instead (untested, not sure if it actually stops it: 
-~> (stdbuf -oL python3 backreach.py >& stdout.txt && sudo halt) & 
+~> ((stdbuf -oL python3 backreach.py >& stdout.txt); sudo halt) & 
 
 
 (stdbuf -oL disables unnecessary buffering when redirecting stdout, stdout and stderr will be sent to the file my_stdout.txt and the '&' starts the process in the backround)

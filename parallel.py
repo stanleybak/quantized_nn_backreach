@@ -46,7 +46,7 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
                 shared_cur_index_start_time[i] = now
                 shared_cur_index[i] = 0
 
-        if next_index % 10000 == 0:
+        if next_index % 5000 == 0:
 
             if next_index > 0:
                 # print longest-running job
@@ -74,7 +74,7 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
             print(f"{round(percent, 2)}% Elapsed: {to_time_str(elapsed)}, ETA: {to_time_str(eta)} " + \
                   f"{next_index}/{num_cases}: ", end='', flush=True)
 
-    if next_index % 200 == 0:
+    if next_index % 100 == 0:
         print(".", end='', flush=True)
 
     params = global_params_list[next_index]
@@ -223,6 +223,8 @@ def get_counterexamples(backreach_single, index=None, params=None):
 
 def save_counterexamples(counterexamples, filename):
     """pickle and save all counterexamples"""
+
+    print("saving counterexamples...")
 
     raw = pickle.dumps(counterexamples)
     mb = len(raw) / 1024 / 1024
@@ -381,10 +383,10 @@ def run_all_parallel(backreach_single, index=None):
     #    print_result(f"Counterexample {i}", counterexample_res)
 
     if index is None:
-        if counterexamples:
+o        if counterexamples:
             print("\nIncomplete analysis; had counterexamples.")
 
-            save_counterexamples(counterexamples, 'counterexamples.pkl')
+            #save_counterexamples(counterexamples, 'counterexamples.pkl')
         else:
             print("\nDone! No counterexamples.")
     else:
