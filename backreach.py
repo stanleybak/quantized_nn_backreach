@@ -19,7 +19,7 @@ from util import make_qstar, is_init_qx_qy, get_num_cores
 from networks import get_cmd
 
 from timerutil import timed
-from settings import Quanta, single_case_timeout
+from settings import Quanta
 from parallel import run_all_parallel, increment_index, shared_num_counterexamples, \
                      worker_had_counterexample, refine_indices, run_single_case
 
@@ -361,7 +361,7 @@ def backreach_single_unwrapped(arg, parallel=True, plot=False) -> Optional[Backr
         s = work.pop()
         popped += 1
 
-        if time.perf_counter() - start > single_case_timeout:
+        if time.perf_counter() - start > Quanta.single_case_timeout:
             rv['timeout'] = True
             break
 

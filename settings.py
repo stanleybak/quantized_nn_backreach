@@ -6,7 +6,6 @@ from typing import List
 from math import pi
 
 # real? counter-example found with quanta: 10,10,0.1
-single_case_timeout = 10
 
 class Quanta:
     pos = 500.0 #250
@@ -17,6 +16,8 @@ class Quanta:
 
     # how many theta1 quanta change for each command
     cmd_quantum_list: List[int] = [] # [0, 1, -1, 2, -2]
+
+    single_case_timeout = 30
 
     @classmethod
     def init_cmd_quantum_list(cls):

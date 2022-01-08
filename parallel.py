@@ -382,7 +382,10 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
         Quanta.theta1 /= 2
         Quanta.init_cmd_quantum_list() # since theta1 was changed
 
-    print(f"Level {level} with quanta: pos={Quanta.pos}, vel={Quanta.vel}, theta1={Quanta.theta1_deg}")
+    Quanta.single_case_timeout *= 2
+
+    print(f"Level {level} with quanta: pos={Quanta.pos}, vel={Quanta.vel}, theta1={Quanta.theta1_deg}, " + \
+          f"timeout={Quanta.single_case_timeout}")
 
     for counterexample in counterexamples:
         alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint = counterexample['params']
