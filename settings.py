@@ -8,8 +8,8 @@ from math import pi
 # real? counter-example found with quanta: 10,10,0.1
 
 class Quanta:
-    pos = 31.25 #250
-    vel = 25.0 # 50
+    pos = 250 #250
+    vel = 50 # 50
     theta1_deg = 1.5 #1.5 # should divide 1.5 degrees evenly
 
     theta1 = 2*pi / (360 / theta1_deg)
@@ -17,7 +17,7 @@ class Quanta:
     # how many theta1 quanta change for each command
     cmd_quantum_list: List[int] = [] # [0, 1, -1, 2, -2]
 
-    single_case_timeout = 15 * 60
+    single_case_timeout = 60 #15 * 60
 
     @classmethod
     def init_cmd_quantum_list(cls):

@@ -97,11 +97,12 @@ def worker_had_counterexample(res):
 def make_params(max_index=None):
     """make params for parallel run"""
 
-    vel_ownship = (100, 1200)
-    #vel_intruder = (0, 1200) # full range
-    vel_intruder = (0, 300)
+    vel_ownship = (600, 1200)
+    vel_intruder = (0, 1200) # full range
+    #vel_intruder = (0, 300)
 
-    print(f"Making params with vel_intruder={vel_intruder} and max_index={max_index}...")
+    print(f"Making params with vel_ownship={vel_ownship}, vel_intruder={vel_intruder}, " + \
+          f"and max_index={max_index}...")
 
     pos_quantum = Quanta.pos
     vel_quantum = Quanta.vel
