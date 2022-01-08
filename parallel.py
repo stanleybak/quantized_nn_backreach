@@ -28,6 +28,7 @@ shared_next_index = multiprocessing.Value('i', 0) # the next index to be done
 shared_cur_index = multiprocessing.Array('i', get_num_cores()) # the current index for each core
 shared_cur_index_start_time = multiprocessing.Array('d', get_num_cores()) # the start time for the current job
 shared_num_counterexamples = multiprocessing.Value('i', 0)
+shared_num_timeouts = multiprocessing.Value('i', 0)
 shared_counterexamples_list = multiprocessing.Manager().list()
 
 def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
@@ -65,7 +66,8 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
                 runtime, index = longest
 
                 if len(shared_counterexamples_list) > 0:
-                    print(f"\nCounterexamples ({len(shared_counterexamples_list)}): {shared_counterexamples_list}",
+                    print(f"\nTimeouts: {shared_num_counterexamples.value}, Counterexamples " + \
+                          f"({len(shared_counterexamples_list)}): {shared_counterexamples_list}",
                           end='')
 
                 print(f"\nLongest Running Job: index={index} ({to_time_str(runtime)})")
@@ -185,6 +187,7 @@ def get_counterexamples(backreach_single, max_index=None, params=None):
     # reset values
     shared_next_index.value = 0 
     shared_num_counterexamples.value = 0
+    shared_num_timeouts.value = 0
     shared_counterexamples_list[:] = [] # clear list
 
     if params is not None:
@@ -497,7 +500,7 @@ def refine_indices(backreach_single, counterexample_index_list):
 def run_single_case(backreach_single, index, plot=False):
     """test a single (difficult) case"""
 
-    print("running single with index={index}...")
+    print(f"running single with index={index}...")
 
     start = time.perf_counter()
     params = make_params(index+1)

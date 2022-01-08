@@ -91,22 +91,64 @@ def make_qstar(orig_star, qstate):
     star = deepcopy(orig_star)
     Timers.toc('deepcopy orig_star')
 
-    # dx constraints
-    dims = star.a_mat.shape[1]
-    zeros = np.zeros(dims)
-    vec = zeros.copy()
-    vec[Star.X_INT] = 1
-    vec[Star.X_OWN] = -1
+    star.limit_dx_dy((min_x, max_x), (min_y, max_y))
 
-    star.add_dense_row(vec, max_x)
-    star.add_dense_row(-vec, -min_x)
+    if False:
+        # dx constraints
+        dims = star.a_mat.shape[1]
+        zeros = np.zeros(dims)
+        vec = zeros.copy()
+        vec[Star.X_INT] = 1
+        vec[Star.X_OWN] = -1
 
-    # dy constraints
-    vec = zeros.copy()
-    #vec[Star.Y_INT] = 1 # y-int is zero
-    vec[Star.Y_OWN] = -1
+        star.add_dense_row(vec, max_x)
+        star.add_dense_row(-vec, -min_x)
 
-    star.add_dense_row(vec, max_y)
-    star.add_dense_row(-vec, -min_y)
+        # dy constraints
+        vec = zeros.copy()
+        #vec[Star.Y_INT] = 1 # y-int is zero
+        vec[Star.Y_OWN] = -1
+
+        star.add_dense_row(vec, max_y)
+        star.add_dense_row(-vec, -min_y)
+
+    return star
+
+@timed
+def make_large_qstar(orig_star, qx_min, qx_max, qy_min, qy_max):
+    """return a subset of the star within the given quantization box"""
+
+    pos_quantum = Quanta.pos
+
+    max_x = (qx_max) * pos_quantum
+    min_x = (qx_min) * pos_quantum
+    max_y = (qy_max) * pos_quantum
+    min_y = (qy_min) * pos_quantum
+
+    # copy the lp and add box constraints
+    Timers.tic('deepcopy orig_star')
+    star = deepcopy(orig_star)
+    Timers.toc('deepcopy orig_star')
+
+    star.limit_dx_dy((min_x, max_x), (min_y, max_y))
+
+    if False:
+        # dx constraints
+        dims = star.a_mat.shape[1]
+        zeros = np.zeros(dims)
+        vec = zeros.copy()
+        vec[Star.X_INT] = 1
+        vec[Star.X_OWN] = -1
+
+        star.add_dense_row(vec, max_x)
+        star.add_dense_row(-vec, -min_x)
+
+        # dy constraints
+        vec = zeros.copy()
+        #vec[Star.Y_INT] = 1 # y-int is zero
+        vec[Star.Y_OWN] = -1
+
+        star.add_dense_row(vec, max_y)
+        star.add_dense_row(-vec, -min_y)
 
     return star

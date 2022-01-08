@@ -93,6 +93,27 @@ class Star:
         return verts
 
     @timed
+    def limit_dx_dy(self, dx_range, dy_range):
+        """limit dx and dy range of the star"""
+
+        for b in self.b_vec:
+            assert b == 0
+
+        xint_row = self.a_mat[Star.X_INT]
+        xown_row = self.a_mat[Star.X_OWN]
+        yown_row = self.a_mat[Star.Y_OWN]
+
+        dx_vec = xint_row - xown_row
+
+        self.hpoly.add_dense_row(dx_vec, dx_range[1])
+        self.hpoly.add_dense_row(-dx_vec, -dx_range[0])
+
+        dy_vec = -yown_row
+
+        self.hpoly.add_dense_row(dy_vec, dy_range[1])
+        self.hpoly.add_dense_row(-dy_vec, -dy_range[0])
+
+    @timed
     def add_dense_row(self, vec, rhs):
         """intersect the domain with a linear constraint"""
 
@@ -112,6 +133,7 @@ class Star:
 
         return self.hpoly.is_feasible()
 
+    @timed
     def get_witness(self, get_radius=False):
         """get a witness point of the star, using the Chebeshev center"""
 

@@ -42,6 +42,8 @@ def get_lp_params(alternate_lp_params=False):
         params2.out_dly = 1 * 1000 # start printing to terminal status after 1 secs
         
         get_lp_params.alt_obj = params2
+
+        print(f"Using GLPK version: {glpk.glp_version()}")
         
     if alternate_lp_params:
         #glpk.glp_term_out(glpk.GLP_ON)

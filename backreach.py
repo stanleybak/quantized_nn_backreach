@@ -15,13 +15,13 @@ import matplotlib.pyplot as plt
 from star import Star
 from plotting import Plotter
 from dubins import init_to_constraints, get_time_elapse_mat
-from util import make_qstar, is_init_qx_qy, get_num_cores
+from util import make_qstar, make_large_qstar, is_init_qx_qy, get_num_cores
 from networks import get_cmd
 
 from timerutil import timed
 from settings import Quanta
 from parallel import run_all_parallel, increment_index, shared_num_counterexamples, \
-                     worker_had_counterexample, refine_indices, run_single_case
+                     worker_had_counterexample, refine_indices, run_single_case, shared_num_timeouts
 
 class State():
     """state of backreach container
@@ -238,35 +238,106 @@ class State():
                 rv.append(prev_s)
                 continue
 
-            # still have a chance at all correct (no splitting): if all incorrect state are infeasible
-            all_incorrect_infeasible = True
+            check_if_all_incorrect_infeasible = True
 
-            for qstate in incorrect_qstates:
-                star = make_qstar(self.star, qstate)
+            if check_if_all_incorrect_infeasible:
+                # still have a chance at all correct (no splitting): if all incorrect state are infeasible
+                all_incorrect_infeasible = True
 
-                if star.is_feasible() is not None:
-                    all_incorrect_infeasible = False
-                    break
+                for qstate in incorrect_qstates:
+                    star = make_qstar(self.star, qstate)
 
-            # no splitting; all incorrect states were infeasible
-            if all_incorrect_infeasible:
-                prev_s = self.copy()
-                prev_s.alpha_prev_list.append(prev_cmd)
+                    if star.is_feasible() is not None:
+                        all_incorrect_infeasible = False
+                        break
 
-                rv.append(prev_s)
-                continue
-
-            # need to split based on if command is correct
-            for qstate in correct_qstates:
-                star = make_qstar(self.star, qstate)
-                domain_witness = star.is_feasible()
-                
-                if domain_witness is not None:
-                    prev_s = self.copy(star)
+                # no splitting; all incorrect states were infeasible
+                if all_incorrect_infeasible:
+                    prev_s = self.copy()
                     prev_s.alpha_prev_list.append(prev_cmd)
 
                     rv.append(prev_s)
+                    continue
 
+            split_all_single = False
+
+            if split_all_single:
+                # split along individual quantum boundaries
+                for qstate in correct_qstates:
+                    star = make_qstar(self.star, qstate)
+                    domain_witness = star.is_feasible()
+
+                    if domain_witness is not None:
+                        prev_s = self.copy(star)
+                        prev_s.alpha_prev_list.append(prev_cmd)
+
+                        rv.append(prev_s)
+            else:
+                # split along multi-quantum boundaries, similar to run-length encoding
+                
+                while correct_qstates:
+                    # pop top left
+                    qdx, qdy = min(correct_qstates)
+                    index = correct_qstates.index((qdx, qdy))
+                    #single_star = feasible_correct_stars.pop(index)
+                    correct_qstates.pop(index)
+
+                    min_x = qdx
+                    max_x = qdx + 1
+
+                    # expand x
+                    while True:
+                        qstate = (max_x, qdy)
+
+                        if qstate in correct_qstates:
+                            correct_qstates.remove(qstate)
+                            max_x += 1
+                        else:
+                            break
+
+                    # expand y
+                    min_y = qdy
+                    max_y = qdy + 1
+                    
+                    while True:
+                        all_in = True
+                        
+                        for x in range(min_x, max_x):
+                            qstate = (x, max_y)
+                            if qstate not in correct_qstates:
+                                all_in = False
+                                break
+
+                        if all_in:
+                            # expand y                            
+                            for x in range(min_x, max_x):
+                                qstate = (x, max_y)
+                                correct_qstates.remove(qstate)
+
+                            max_y += 1
+                        else:
+                            break
+
+                    force_single_dx_dy = False
+
+                    if force_single_dx_dy:
+                        for x in range(min_x, max_x):
+                            for y in range(min_y, max_y):
+                                qstate = (x, y)
+                                star = make_large_qstar(self.star, x, x + 1, y, y+1)
+
+                                if star.is_feasible() is not None:
+                                    prev_s = self.copy(star)
+                                    prev_s.alpha_prev_list.append(prev_cmd)
+                                    rv.append(prev_s)
+                    else:
+
+                        large_star = make_large_qstar(self.star, min_x, max_x, min_y, max_y)
+
+                        if large_star.is_feasible() is not None:
+                            prev_s = self.copy(large_star)
+                            prev_s.alpha_prev_list.append(prev_cmd)
+                            rv.append(prev_s)
         return rv
 
     @timed
@@ -363,6 +434,11 @@ def backreach_single_unwrapped(arg, parallel=True, plot=False) -> Optional[Backr
 
         if time.perf_counter() - start > Quanta.single_case_timeout:
             rv['timeout'] = True
+
+            if parallel:
+                with shared_num_timeouts.get_lock():
+                    shared_num_counterexamples.value += 1
+            
             break
 
         if plotter is not None:
@@ -371,7 +447,7 @@ def backreach_single_unwrapped(arg, parallel=True, plot=False) -> Optional[Backr
                 plotter.plot_star(s.star, 'k')
                 unique_prefixes.add(tup)
 
-        if not parallel and popped % 100 == 0:
+        if not parallel and popped % 1000 == 0:
             lens = [len(w.alpha_prev_list) for w in work]
             max_len = max(lens)
             
@@ -422,7 +498,9 @@ def main():
     
     if get_num_cores() < 50:
         # 477 is worst WHY?, 166 is 50 secs
-        run_single_case(backreach_single, index=166, plot=False)
+        Quanta.single_case_timeout = 300
+        # 
+        run_single_case(backreach_single, index=1837, plot=False)
         #run_all_parallel(backreach_single, max_index=1822)
     else:
         # on AWS
