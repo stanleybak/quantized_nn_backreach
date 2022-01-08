@@ -383,7 +383,7 @@ def run_all_parallel(backreach_single, index=None):
     #    print_result(f"Counterexample {i}", counterexample_res)
 
     if index is None:
-o        if counterexamples:
+        if counterexamples:
             print("\nIncomplete analysis; had counterexamples.")
 
             #save_counterexamples(counterexamples, 'counterexamples.pkl')
