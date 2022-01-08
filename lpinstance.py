@@ -12,7 +12,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 from termcolor import colored
-from timerutil import timed
+from timerutil import timed, Timers
 
 import swiglpk as glpk
 
@@ -447,7 +447,8 @@ class LpInstance:
                     assert lb < ub
                     glpk.glp_set_col_bnds(self.lp, num_cols + i + 1, glpk.GLP_DB, lb, ub)  # double-bounded variable
 
-    def add_dense_row(self, vec, rhs, normalize=True):
+    @timed
+    def add_dense_row(self, vec, rhs, normalize=False):
         '''
         add a row from a dense nd.array, row <= rhs
         '''
@@ -457,11 +458,14 @@ class LpInstance:
         assert len(vec) == self.get_num_cols(), f"vec had {len(vec)} values, but lpi has {self.get_num_cols()} cols"
 
         if normalize:
+            Timers.tic('normalize')
             norm = np.linalg.norm(vec)
             
             if norm > 1e-9:
                 vec = vec / norm
                 rhs = rhs / norm
+
+            Timers.toc('normalize')
 
         rows_before = self.get_num_rows()
 

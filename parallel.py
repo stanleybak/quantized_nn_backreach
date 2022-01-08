@@ -48,7 +48,7 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
                 shared_cur_index_start_time[i] = now
                 shared_cur_index[i] = 0
 
-        if next_index % 1000 == 0:
+        if next_index % 500 == 0:
 
             if next_index > 0:
                 # print longest-running job
@@ -68,7 +68,7 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
                     print(f"\nCounterexamples ({len(shared_counterexamples_list)}): {shared_counterexamples_list}",
                           end='')
 
-                print(f"\nLongest Running Job: index={index} ({round(runtime, 2)}s)")
+                print(f"\nLongest Running Job: index={index} ({to_time_str(runtime)})")
 
             # print progress
             num_cases = len(global_params_list)
@@ -216,14 +216,19 @@ def get_counterexamples(backreach_single, max_index=None, params=None):
     with multiprocessing.Pool(get_num_cores(), initializer=init_process, initargs=(q, )) as pool:
         res_list = pool.map(backreach_single, range(num_cases), chunksize=1)
         max_runtime = res_list[0]
+        timeouts = 0
 
         for res in res_list:
             if res is None:
-                print("Warning: res was None")
+                print("Warning: res was None (exception?)")
                 continue
             
             if res['counterexample'] is not None:
                 counterexamples.append(res)
+
+            if res['timeout']:
+                counterexamples.append(res)
+                timeouts += 1
 
             t = res['runtime']
             total_runtime += t
@@ -234,6 +239,8 @@ def get_counterexamples(backreach_single, max_index=None, params=None):
     diff = time.perf_counter() - global_start_time
     print(f"\nfinished enumeration ({num_cases} cases) in {to_time_str(diff)}, " + \
           f"counterexamples: {len(counterexamples)}")
+
+    print(f"num timeouts: {timeouts}")
 
     if shared_counterexamples_list:
         print(f"counterexamples ({len(shared_counterexamples_list)}): {shared_counterexamples_list}")
@@ -343,6 +350,11 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
     # need to do this check before refining quanta
     for i, counterexample in enumerate(counterexamples):
         print(f"Replaying counterexample {i+1}/{len(counterexamples)}")
+
+        if counterexample['timeout']:
+            print("was timeout")
+            continue
+        
         assert counterexample['counterexample'] is not None
         
         if is_real_counterexample(counterexample):
@@ -374,11 +386,12 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
 
     for counterexample in counterexamples:
         alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint = counterexample['params']
-        
-        _, _, radius = s.star.get_witness(get_radius=True)
+        s = counterexample['counterexample']
+        if s is not None:
+            _, _, radius = s.star.get_witness(get_radius=True)
 
-        if radius < 1e-6: # radius was too small to be a real counterexample (replay fails due to numerics)
-            continue
+            if radius < 1e-6: # radius was too small to be a real counterexample (replay fails due to numerics)
+                continue
 
         cqstates = [] # candidate qstates for the next iteration
 
@@ -500,6 +513,7 @@ def run_single_case(backreach_single, index, plot=False):
     if res is not None:
         print(f"popped: {res['num_popped']}")
         print(f"unique_paths: {res['unique_paths']}")
+        print(f"counterexample: {res['counterexample'] is not None}")
 
     if plot:
         plt.show()

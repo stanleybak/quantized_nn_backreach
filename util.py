@@ -10,7 +10,7 @@ import numpy as np
 from star import Star
 from settings import Quanta
 
-from timerutil import timed
+from timerutil import timed, Timers
 
 def is_init_qx_qy(qx, qy):
     """is this an initial quantized location?
@@ -87,7 +87,9 @@ def make_qstar(orig_star, qstate):
     min_y = (qdy) * pos_quantum
 
     # copy the lp and add box constraints
+    Timers.tic('deepcopy orig_star')
     star = deepcopy(orig_star)
+    Timers.toc('deepcopy orig_star')
 
     # dx constraints
     dims = star.a_mat.shape[1]

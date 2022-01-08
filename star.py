@@ -92,6 +92,7 @@ class Star:
 
         return verts
 
+    @timed
     def add_dense_row(self, vec, rhs):
         """intersect the domain with a linear constraint"""
 

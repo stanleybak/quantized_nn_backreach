@@ -15,11 +15,11 @@ import matplotlib.pyplot as plt
 from star import Star
 from plotting import Plotter
 from dubins import init_to_constraints, get_time_elapse_mat
-from util import make_qstar, is_init_qx_qy
+from util import make_qstar, is_init_qx_qy, get_num_cores
 from networks import get_cmd
 
 from timerutil import timed
-from settings import Quanta
+from settings import Quanta, single_case_timeout
 from parallel import run_all_parallel, increment_index, shared_num_counterexamples, \
                      worker_had_counterexample, refine_indices, run_single_case
 
@@ -46,8 +46,6 @@ class State():
         self.alpha_prev_list = [alpha_prev]
         
         self.star = star
-        self.domain_witness = star.is_feasible()
-        assert self.domain_witness is not None
         
         self.state_id = -1
         self.assign_state_id()
@@ -56,11 +54,10 @@ class State():
         return f"State(id={self.state_id} with alpha_prev_list = {self.alpha_prev_list})"
 
     @timed
-    def copy(self, new_star=None, new_domain_witness=None):
+    def copy(self, new_star=None):
         """return a deep copy of self"""
 
         if new_star is not None:
-            assert new_domain_witness is not None
             self_star = self.star
             self.star = None
 
@@ -69,7 +66,6 @@ class State():
 
         if new_star is not None:
             rv.star = new_star
-            rv.domain_witness = new_domain_witness
             
             # restore self.star
             self.star = self_star
@@ -183,7 +179,7 @@ class State():
             self.qtheta1 -= delta_q_theta
 
     @timed
-    def get_predecessors(self, plotter=None, stdout=False):
+    def get_predecessors(self, stdout=False):
         """get the valid predecessors of this star
         """
 
@@ -191,9 +187,6 @@ class State():
 
         # compute previous state
         self.backstep()
-
-        if plotter is not None:
-            plotter.plot_star(self.star)
 
         rv: List[State] = []
         dx_qrange, dy_qrange = self.get_dx_dy_qrange(stdout=stdout)
@@ -269,7 +262,7 @@ class State():
                 domain_witness = star.is_feasible()
                 
                 if domain_witness is not None:
-                    prev_s = self.copy(star, domain_witness)
+                    prev_s = self.copy(star)
                     prev_s.alpha_prev_list.append(prev_cmd)
 
                     rv.append(prev_s)
@@ -314,6 +307,7 @@ class BackreachResult(TypedDict):
     unique_paths: int
     index: int
     params: Tuple[int, int, int, int, int, int]
+    timeout: bool
 
 def backreach_single(arg, parallel=True, plot=False) -> Optional[BackreachResult]:
     """run backreachability from a single symbolic state"""
@@ -350,35 +344,47 @@ def backreach_single_unwrapped(arg, parallel=True, plot=False) -> Optional[Backr
     popped = 0
 
     rv: BackreachResult = {'counterexample': None, 'runtime': np.inf, 'params': params,
-                           'num_popped': 0, 'unique_paths': 0, 'index': index}
+                           'num_popped': 0, 'unique_paths': 0, 'index': index, 'timeout': False}
     deadends = set()
+    unique_prefixes = None
 
     plotter: Optional[Plotter] = None
 
     if plot:
+        unique_prefixes = set()
         plotter = Plotter()
         plotter.plot_star(init_s.star, 'r')
+
+    start = time.perf_counter()
 
     while work and rv['counterexample'] is None:
         s = work.pop()
         popped += 1
 
-        if parallel == False and popped % 100 == 0:
+        if time.perf_counter() - start > single_case_timeout:
+            rv['timeout'] = True
+            break
+
+        if plotter is not None:
+            tup = tuple(s.alpha_prev_list)
+            if not tup in unique_prefixes:
+                plotter.plot_star(s.star, 'k')
+                unique_prefixes.add(tup)
+
+        if not parallel and popped % 100 == 0:
             lens = [len(w.alpha_prev_list) for w in work]
             max_len = max(lens)
             
             print(f"popped {popped}, unique_paths: {len(deadends)}, remaining_work: {len(work)}, max_len: {max_len}")
 
-        predecessors = s.get_predecessors(plotter=plotter)
+        predecessors = s.get_predecessors()
 
         for p in predecessors:
             work.append(p)
             
             if p.alpha_prev_list[-2] == 0 and p.alpha_prev_list[-1] == 0:
                 # also check if > 20000 ft
-                domain_pt = p.domain_witness
-                assert domain_pt is not None
-                pt = p.star.domain_to_range(domain_pt)
+                pt = p.star.get_witness()[1]
 
                 dx = (pt[Star.X_INT] - pt[Star.X_OWN])
                 dy = (0 - pt[Star.Y_OWN])
@@ -413,9 +419,14 @@ def main():
     Quanta.init_cmd_quantum_list()
 
     # emacs hard-warp command: M+x fill-paragraph
-    #run_single_case(backreach_single, index=38)
-    #run_all_parallel(backreach_single, max_index=1822)
-    run_all_parallel(backreach_single)
+    
+    if get_num_cores() < 50:
+        # 477 is worst WHY?, 166 is 50 secs
+        run_single_case(backreach_single, index=10779, plot=False)
+        #run_all_parallel(backreach_single, max_index=1822)
+    else:
+        # on AWS
+        run_all_parallel(backreach_single)
 
     #refine_indices(backreach_single, counterexample_indices)
 

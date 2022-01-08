@@ -6,6 +6,7 @@ from typing import List
 from math import pi
 
 # real? counter-example found with quanta: 10,10,0.1
+single_case_timeout = 10
 
 class Quanta:
     pos = 500.0 #250
