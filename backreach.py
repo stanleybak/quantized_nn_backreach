@@ -344,12 +344,7 @@ def backreach_single(arg, parallel=True, plot=False) -> Optional[BackreachResult
         plotter = Plotter()
         plotter.plot_star(init_s.star, 'r')
 
-    while work:
-
-        if rv['counterexample'] is not None:
-            print("break because of counterexample")
-            break
-
+    while work and rv['counterexample'] is None:
         s = work.pop()
         popped += 1
 
