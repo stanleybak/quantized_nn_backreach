@@ -8,7 +8,7 @@ import os
 import numpy as np
 
 from star import Star
-from settings import pos_quantum
+from settings import Quanta
 
 from timerutil import timed
 
@@ -19,6 +19,7 @@ def is_init_qx_qy(qx, qy):
     """
 
     rv = False
+    pos_quantum = Quanta.pos
 
     xs = (qx * pos_quantum, (qx+1) * pos_quantum)
     ys = (qy * pos_quantum, (qy+1) * pos_quantum)
@@ -45,6 +46,8 @@ def is_init_qx_qy(qx, qy):
 def get_num_cores():
     """get num cores available for comulation"""
 
+    #print("DEBUG: two cores")
+    #return 2
     return len(os.sched_getaffinity(0))
 
 def to_time_str(secs):
@@ -74,6 +77,8 @@ def quantize(x, delta=50):
 @timed
 def make_qstar(orig_star, qstate):
     """return a subset of the star within the given quantization box"""
+
+    pos_quantum = Quanta.pos
 
     qdx, qdy = qstate[:2]
     max_x = (qdx + 1) * pos_quantum

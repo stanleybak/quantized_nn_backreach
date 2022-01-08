@@ -7,7 +7,6 @@ Used to replay traces, as a sanity check that things are working correctly
 from functools import lru_cache
 import os
 import math
-import time
 
 import numpy as np
 from scipy import ndimage
@@ -23,7 +22,7 @@ from matplotlib.lines import Line2D
 
 import onnxruntime as ort
 
-from settings import pos_quantum, vel_quantum, theta1_quantum
+from settings import Quanta
 
 skip_quantization = False
 
@@ -135,6 +134,10 @@ def state8_to_qinput_qstate(state8, stdout=False):
     assert len(state8) == 8
 
     x1, y1, vxo, vyo, x2, y2, vxi, vyi = state8
+
+    pos_quantum = Quanta.pos
+    vel_quantum = Quanta.vel
+    theta1_quantum = Quanta.theta1
 
     dy = quantize(y2 - y1, pos_quantum)
     dx = quantize(x2 - x1, pos_quantum)
@@ -684,6 +687,9 @@ def main():
         skip_quantization = True
         skip_checks = True
         #alpha_prev_list = []
+
+        
+    theta1_quantum = Quanta.theta1
         
     q_theta1 = qtheta1 * theta1_quantum + theta1_quantum / 2 
     cmd_list = [0] * (len(alpha_prev_list) - 1)

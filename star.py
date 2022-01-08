@@ -111,7 +111,7 @@ class Star:
 
         return self.hpoly.is_feasible()
 
-    def get_witness(self, print_radius=False):
+    def get_witness(self, get_radius=False):
         """get a witness point of the star, using the Chebeshev center"""
 
         #assert self.hpoly.is_feasible()
@@ -168,13 +168,14 @@ class Star:
         max_r[-1] = -1
 
         res = lpi.minimize(max_r)
-
-        if print_radius:
-            print(f"# chebyshev center radius: {res[-1]}")
         
         domain_pt = res[:-1]
         range_pt = self.domain_to_range(domain_pt)
 
+        if get_radius:
+            radius = res[-1]
+            return domain_pt, range_pt, radius
+        
         return domain_pt, range_pt
 
     def domain_to_range(self, domain_pt):

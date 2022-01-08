@@ -19,7 +19,7 @@ from networks import get_cmd
 
 from timerutil import timed, Timers
 from settings import Quanta
-from parallel import run_all_parallel, increment_index, shared_num_counterexamples
+from parallel import run_all_parallel, increment_index, shared_num_counterexamples, worker_had_counterexample
 
 class State():
     """state of backreach container
@@ -87,58 +87,63 @@ class State():
 
         s = self
         
-        domain_pt, range_pt = s.star.get_witness(print_radius=True)
+        domain_pt, range_pt, rad = s.star.get_witness(get_radius=True)
+        print(f"chebeshev point radius: {rad}")
         print(f"end = np.{repr(domain_pt)}\nstart = np.{repr(range_pt)}")
 
-        p = Plotter()
-
-        print()
-
-        pt = range_pt.copy()
-        
-        q_theta1 = s.qtheta1
-        s_copy = deepcopy(s)
-
-        p.plot_star(s.star, color='r')
-        mismatch = False
-
-        pos_quantum = Quanta.pos
-
-        for i in range(len(s.alpha_prev_list) - 1):
-            net = s.alpha_prev_list[-(i+1)]
-            expected_cmd = s.alpha_prev_list[-(i+2)]
-
-            dx = floor((pt[Star.X_INT] - pt[Star.X_OWN]) / pos_quantum)
-            dy = floor((0 - pt[Star.Y_OWN]) / pos_quantum)
-
-            qstate = (dx, dy, q_theta1, s.qv_own, s.qv_int)
-            
-            cmd_out = get_cmd(net, *qstate)
-            print(f"({i+1}). network {net} -> {cmd_out}")
-            print(f"state: {list(pt)}")
-            print(f"qstate: {qstate}")
-
-            if cmd_out != expected_cmd:
-                print(f"Mismatch at step {i+1}. got cmd {cmd_out}, expected cmd {expected_cmd}")
-                mismatch = True
-                break
-
-            s_copy.backstep(forward=True, forward_alpha_prev=cmd_out)
-            p.plot_star(s_copy.star)
-                
-            mat = get_time_elapse_mat(cmd_out, 1.0)
-            pt = mat @ pt
-
-            delta_q_theta = Quanta.cmd_quantum_list[cmd_out]# * theta1_quantum
-            q_theta1 += delta_q_theta
-
-        if plot:
-            plt.show()
-
-        if mismatch:
-            print("mismatch in replay... was the chebyshev center radius tiny?")
+        if rad < 1e-6:
+            print("WARNING: radius was tiny, skipping replay (may mismatch due to numerics)")
         else:
-            print("witness commands all matched expectation")
+
+            p = Plotter()
+
+            print()
+
+            pt = range_pt.copy()
+
+            q_theta1 = s.qtheta1
+            s_copy = deepcopy(s)
+
+            p.plot_star(s.star, color='r')
+            mismatch = False
+
+            pos_quantum = Quanta.pos
+
+            for i in range(len(s.alpha_prev_list) - 1):
+                net = s.alpha_prev_list[-(i+1)]
+                expected_cmd = s.alpha_prev_list[-(i+2)]
+
+                dx = floor((pt[Star.X_INT] - pt[Star.X_OWN]) / pos_quantum)
+                dy = floor((0 - pt[Star.Y_OWN]) / pos_quantum)
+
+                qstate = (dx, dy, q_theta1, s.qv_own, s.qv_int)
+
+                cmd_out = get_cmd(net, *qstate)
+                print(f"({i+1}). network {net} -> {cmd_out}")
+                print(f"state: {list(pt)}")
+                print(f"qstate: {qstate}")
+
+                if cmd_out != expected_cmd:
+                    print(f"Mismatch at step {i+1}. got cmd {cmd_out}, expected cmd {expected_cmd}")
+                    mismatch = True
+                    break
+
+                s_copy.backstep(forward=True, forward_alpha_prev=cmd_out)
+                p.plot_star(s_copy.star)
+
+                mat = get_time_elapse_mat(cmd_out, 1.0)
+                pt = mat @ pt
+
+                delta_q_theta = Quanta.cmd_quantum_list[cmd_out]# * theta1_quantum
+                q_theta1 += delta_q_theta
+
+            if plot:
+                plt.show()
+
+            if mismatch:
+                print("mismatch in replay... was the chebyshev center radius tiny?")
+            else:
+                print("witness commands all matched expectation")
 
     def assign_state_id(self):
         """assign and increment state_id"""
@@ -380,6 +385,9 @@ def backreach_single(arg, parallel=True, plot=False) -> Optional[BackreachResult
     rv['runtime'] = diff
     rv['num_popped'] = popped
     rv['unique_paths'] = len(deadends)
+
+    if rv['counterexample'] is not None and parallel:
+        worker_had_counterexample(rv)
 
     return rv
 

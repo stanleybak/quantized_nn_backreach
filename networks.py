@@ -84,6 +84,53 @@ def get_cmd(alpha_prev, qdx, qdy, qtheta1, qv_own, qv_int, stdout=False) -> int:
 
     return cmd
 
+def get_cmd_continuous(alpha_prev, dx, dy, theta1, v_own, v_int, stdout=False) -> int:
+    """get the command at the given continuous state
+
+    returns cmd
+    """
+
+    assert isinstance(alpha_prev, int) and 0 <= alpha_prev <= 4, f"alpha_prev was {alpha_prev}"
+
+    # convert quantized state to floats
+    theta2 = 0
+
+    # dx is intruder - ownship
+
+    # convert to network input
+    rho = np.sqrt(dx*dx + dy*dy)
+
+    if rho > 60760:
+        cmd = 0
+    else:
+        theta = atan2(dy, dx)
+
+        psi = theta2 - theta1
+
+        theta -= theta1 # angle to intruder relative to ownship heading direction
+
+        # get angles into range
+        while theta < -np.pi:
+            theta += 2 * np.pi
+
+        while theta > np.pi:
+            theta -= 2 * np.pi
+
+        while psi < -np.pi:
+            psi += 2 * np.pi
+
+        while psi > np.pi:
+            psi -= 2 * np.pi
+
+        net_input = (rho, theta, psi, v_own, v_int)
+            
+        i = np.array(net_input)
+
+        out = run_network(alpha_prev, i)
+        cmd = int(np.argmin(out))
+
+    return cmd
+
 @timed
 def run_network(alpha_prev, x, stdout=False):
     'run the network and return the output'

@@ -8,11 +8,15 @@ from typing import List, Tuple
 import time
 import multiprocessing
 import pickle
-from math import pi
+from math import pi, floor
+from copy import deepcopy
 
 from settings import Quanta
 from util import to_time_str, get_num_cores, is_init_qx_qy
 from timerutil import Timers
+from star import Star
+from networks import get_cmd, get_cmd_continuous
+from dubins import get_time_elapse_mat
 
 global_start_time = 0.0
 global_params_list: List[Tuple[int, int, int, int, int, int]] = [] # assigned after we get params made
@@ -21,8 +25,8 @@ global_process_id = -1 # assigned in init
 shared_next_index = multiprocessing.Value('i', 0) # the next index to be done
 shared_cur_index = multiprocessing.Array('i', get_num_cores()) # the current index for each core
 shared_cur_index_start_time = multiprocessing.Array('d', get_num_cores()) # the start time for the current job
-
 shared_num_counterexamples = multiprocessing.Value('i', 0)
+shared_counterexamples_list = multiprocessing.Manager().list()
 
 def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
     """get next work index and params (and print update)"""
@@ -37,23 +41,29 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
         shared_cur_index[global_process_id] = next_index
         shared_cur_index_start_time[global_process_id] = now
 
-        if next_index % 10000 == 0:
-            if next_index == 0:
-                for i in range(get_num_cores()):
-                    shared_cur_index_start_time[0] = now
-
-            # print longest-running job
-            longest: Tuple[float, int] = (now - shared_cur_index_start_time[0], 0)
-
+        if next_index == 0: # reset all times
             for i in range(get_num_cores()):
-                cur: Tuple[float, int] = (now - shared_cur_index_start_time[i], i)
+                shared_cur_index_start_time[i] = now
+                shared_cur_index[i] = 0
 
-                if cur > longest:
-                    longest = cur
+        if next_index % 10000 == 0:
 
-            runtime, index = longest
+            if next_index > 0:
+                # print longest-running job
+                longest: Tuple[float, int] = (now - shared_cur_index_start_time[0], 0)
 
-            print(f"\nLongest Running Job: index={index} ({round(runtime, 2)}s)")
+                for i in range(get_num_cores()):
+                    cur: Tuple[float, int] = (now - shared_cur_index_start_time[i], i)
+
+                    if cur > longest:
+                        longest = cur
+
+                runtime, index = longest
+
+                if len(shared_counterexamples_list) > 0:
+                    print(f"Counterexamples ({len(shared_counterexamples_list)}): {shared_counterexamples_list}")
+
+                print(f"\nLongest Running Job: index={index} ({round(runtime, 2)}s)")
 
             # print progress
             num_cases = len(global_params_list)
@@ -71,6 +81,11 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
     #print(next_index, params)
 
     return next_index, params
+
+def worker_had_counterexample(res):
+    """called when worker has a counterexample to update shared state"""
+
+    shared_counterexamples_list.append(res['index'])
 
 def make_params():
     """make params for parallel run"""
@@ -145,23 +160,33 @@ def print_result(label, res):
           f"y_own={y_own}\nqtheta1={qtheta1}\nq_vown={q_vown}\nq_vint={q_vint}")
     print(f'num_popped: {num_popped}, unique_paths: {unique_paths}, has_counterexample: {unsafe}')
 
-def get_counterexamples(backreach_single, index=None):
+def get_counterexamples(backreach_single, index=None, params=None):
     """get all counterexamples at the current quantization"""
 
     global global_start_time
     global global_params_list
 
-    # shared variable for coordination
-    start = time.perf_counter()
-    global_params_list = make_params()
-    diff = time.perf_counter() - start
+    # reset values
+    shared_next_index.value = 0 
+    shared_num_counterexamples.value = 0
+    shared_counterexamples_list[:] = [] # clear list
 
-    if index is not None:
-        global_params_list = [global_params_list[index]]
+    if params is not None:
+        num_cases = len(params)
+        global_params_list = params
+        print(f"Using passed-in params (num: {num_cases})")
 
-    num_cases = len(global_params_list)
-    print(f"Made params for {num_cases} cases in {round(diff, 2)} secs")
-    
+    else:
+        start = time.perf_counter()
+        global_params_list = make_params()
+        diff = time.perf_counter() - start
+
+        if index is not None:
+            global_params_list = [global_params_list[index]]
+
+        num_cases = len(global_params_list)
+        print(f"Made params for {num_cases} cases in {round(diff, 2)} secs")
+        
     global_start_time = time.perf_counter()
     q = multiprocessing.Queue()
 
@@ -188,6 +213,10 @@ def get_counterexamples(backreach_single, index=None):
     diff = time.perf_counter() - global_start_time
     print(f"\nfinished enumeration ({num_cases} cases) in {to_time_str(diff)}, " + \
           f"counterexamples: {len(counterexamples)}")
+
+    if shared_counterexamples_list:
+        print(f"counterexamples ({len(shared_counterexamples_list)}): {shared_counterexamples_list}")
+    
     print(f"Avg runtime per case: {to_time_str(total_runtime / num_cases)}")
 
     return counterexamples, max_runtime
@@ -203,51 +232,134 @@ def save_counterexamples(counterexamples, filename):
 
     print(f"Saved {len(counterexamples)} counterexamples ({round(mb, 3)} MB) to {filename}")
 
-def refine_counterexamples(counterexamples, level=0):
+def is_real_counterexample(res):
+    """is the passed in backreach a real (non-quantized counter-example)"""
+
+    assert res['counterexample'] is not None
+
+    s = res['counterexample']
+
+    _, range_pt, radius = s.star.get_witness(get_radius=True)
+
+    if radius < 1e-6:
+        return False
+    
+    pt = range_pt.copy()
+
+    q_theta1 = s.qtheta1
+    s_copy = deepcopy(s)
+
+    pos_quantum = Quanta.pos
+    mismatch_quantized = False
+    mismatch_continuous = True
+
+    for i in range(len(s.alpha_prev_list) - 1):
+        net = s.alpha_prev_list[-(i+1)]
+        expected_cmd = s.alpha_prev_list[-(i+2)]
+
+        dx = pt[Star.X_INT] - pt[Star.X_OWN]
+        dy = 0 - pt[Star.Y_OWN]
+        
+        qdx = floor(dx / pos_quantum)
+        qdy = floor(dy / pos_quantum)
+
+        qstate = (qdx, qdy, q_theta1, s.qv_own, s.qv_int)
+        q_cmd_out = get_cmd(net, *qstate)
+
+        c_theta1 = q_theta1 * Quanta.theta1 + Quanta.theta1 / 2
+        vown = s.qv_own * Quanta.vel + Quanta.vel / 2
+        vint = s.qv_int * Quanta.vel + Quanta.vel / 2
+        cstate = (dx, dy, c_theta1, vown, vint)
+
+        c_cmd_out = get_cmd_continuous(net, *cstate)
+        
+        if q_cmd_out != expected_cmd and not mismatch_quantized:
+            print(f"Quantized mismatch at step {i+1}. got cmd {q_cmd_out}, expected cmd {expected_cmd}")
+            mismatch_quantized = True
+
+        if c_cmd_out != expected_cmd:
+            print(f"Non-quantized mismatch at step {i+1}/{len(s.alpha_prev_list) - 1}. " + \
+                  f"got cmd {c_cmd_out}, expected cmd {expected_cmd}")
+            mismatch_continuous = True
+
+        if mismatch_quantized and mismatch_continuous:
+            break
+
+        s_copy.backstep(forward=True, forward_alpha_prev=expected_cmd)
+
+        mat = get_time_elapse_mat(expected_cmd, 1.0)
+        pt = mat @ pt
+
+        delta_q_theta = Quanta.cmd_quantum_list[expected_cmd]# * theta1_quantum
+        q_theta1 += delta_q_theta
+
+    if not mismatch_quantized:
+        print("Quantized replay matched")
+
+    return not mismatch_continuous
+
+def refine_counterexamples(backreach_single, counterexamples, level=0):
     """refine counterexamples
 
     returns True if refinement is safe
     """
 
-    rv = True
+    print(f"\n####### refine counterexamples with {len(counterexamples)} ######")
+
+    # need to do this check before refining quanta
+    for i, counterexample in enumerate(counterexamples):
+        print(f"Replaying counterexample {i+1}/{len(counterexamples)}")
+        
+        if is_real_counterexample(counterexample):
+            print(f"Found reach counterexample at state: {counterexample['params']}")
+            return False
+
     qstates = [] # qstates after refinement
 
-    levels = ['pos', 'vel', 'pos', 'vel', 'pos', 'vel', 'theta1']
+    levels = ['pos', 'vel', 'pos', 'vel', 'pos', 'vel', 'theta1', 'pos', 'vel', 'theta1', 'pos', 'vel', 'theta1']
 
     if level >= len(levels):
-        print("Refinement reached max level")
-        rv = False
-    else:
+        print("Refinement reached max level: {len(levels)}")
+        return False
+    
+    if levels[level] == 'pos':
+        print(f"Level {level}: refining q_pos from {Quanta.pos} to {Quanta.pos / 2}")
+        Quanta.pos /= 2
+    elif levels[level] == 'vel':
+        print(f"Level {level}: refining q_vel from {Quanta.vel} to {Quanta.vel / 2}")
+        Quanta.vel /= 2
+    elif levels[level] == 'theta1':
+        print(f"Level {level}: refining q_theta1 from {Quanta.theta1_deg} to {Quanta.theta1_deg / 2}")
+        Quanta.theta1_deg /= 2
+        Quanta.theta1 /= 2
+        Quanta.init_cmd_quantum_list() # since theta1 was changed
+
+    print(f"Level {level} with quanta: pos={Quanta.pos}, vel={Quanta.vel}, theta1={Quanta.theta1_deg}")
+
+    for counterexample in counterexamples:
+        alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint = counterexample['params']
+
+        # add refined states to qstates
         if levels[level] == 'pos':
-            print(f"Level {level}: refining q_pos from {Quanta.pos} to {Quanta.pos / 2}")
-            Quanta.pos /= 2
+            qstates.append((alpha_prev, 2*x_own, 2*y_own, qtheta1, q_vown, q_vint))
+            qstates.append((alpha_prev, 2*x_own + 1, 2*y_own, qtheta1, q_vown, q_vint))
+            qstates.append((alpha_prev, 2*x_own, 2*y_own + 1, qtheta1, q_vown, q_vint))
+            qstates.append((alpha_prev, 2*x_own + 1, 2*y_own + 1, qtheta1, q_vown, q_vint))
         elif levels[level] == 'vel':
-            print(f"Level {level}: refining q_vel from {Quanta.vel} to {Quanta.vel / 2}")
-            Quanta.vel /= 2
-        elif levels[level] == 'theta1':
-            print(f"Level {level}: refining q_theta1 from {Quanta.theta1_deg} to {Quanta.theta1_deg / 2}")
-            Quanta.theta1_deg /= 2
-            Quanta.theta1 /= 2
-            Quanta.init_cmd_quantum_list() # since theta1 was changed
-        
-        for counterexample in counterexamples:
-            if is_real_counterexample(counterexample):
-                print(f"Found reach counterexample at state: {counterexample}")
-                rv = False
-                break
+            qstates.append((alpha_prev, x_own, y_own, qtheta1, 2*q_vown, 2*q_vint))
+            qstates.append((alpha_prev, x_own, y_own, qtheta1, 2*q_vown+1, 2*q_vint))
+            qstates.append((alpha_prev, x_own, y_own, qtheta1, 2*q_vown, 2*q_vint+1))
+            qstates.append((alpha_prev, x_own, y_own, qtheta1, 2*q_vown+1, 2*q_vint+1))
+        else:
+            assert levels[level] == 'theta1'
+            qstates.append((alpha_prev, x_own, y_own, 2*qtheta1, q_vown, q_vint))
+            qstates.append((alpha_prev, x_own, y_own, 2*qtheta1 + 1, q_vown, q_vint))
 
-            # (alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint)
-            alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint = counterexample['params']
-
-            # add refined states to qstates_after_refinement
-            if levels[level] == 'pos':
-                qstates.append((alpha_prev, 2*x_own, 2*y_own, qtheta1, q_vown, q_vint))
-                qstates.append((alpha_prev, 2*x_own + 1, 2*y_own, qtheta1, q_vown, q_vint))
-                qstates.append((alpha_prev, 2*x_own, 2*y_own + 1, qtheta1, q_vown, q_vint))
-                qstates.append((alpha_prev, 2*x_own + 1, 2*y_own + 1, qtheta1, q_vown, q_vint))
-            elif levels[level] == 'vel':
-                print("!!!!!!!!!! WORKING HERE !!!!!!!!!!!!!!")
-                HERE!!!!!!!!!!!!!!!!!!!!!
+    new_counterexamples, _ = get_counterexamples(backreach_single, params=qstates)
+    rv = True
+    
+    if new_counterexamples:
+        rv = refine_counterexamples(backreach_single, new_counterexamples, level=level + 1)
 
     return rv
 
@@ -259,14 +371,14 @@ def run_all_parallel(backreach_single, index=None):
     print()
     print_result('longest runtime', max_runtime)
 
-    for i, counterexample_res in enumerate(counterexamples):
-        counterexample = counterexample_res['counterexample']
+    #for i, counterexample_res in enumerate(counterexamples):
+    #    counterexample = counterexample_res['counterexample']
         
-        print(f"\nCounterexample {i}:")
-        counterexample.print_replay_init()
-        counterexample.print_replay_witness(plot=False)
+    #    print(f"\nCounterexample {i}:")
+    #    counterexample.print_replay_init()
+    #    counterexample.print_replay_witness(plot=False)
 
-        print_result(f"Counterexample {i}", counterexample_res)
+    #    print_result(f"Counterexample {i}", counterexample_res)
 
     if index is None:
         if counterexamples:
@@ -279,5 +391,5 @@ def run_all_parallel(backreach_single, index=None):
         print(f"Finished with index: {index}")
 
     if counterexamples:
-        safe = refine_counterexamples(counterexamples)
+        safe = refine_counterexamples(backreach_single, counterexamples)
         print(f"Proven safe after refining: {safe}")
