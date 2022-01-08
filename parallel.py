@@ -212,7 +212,7 @@ def get_counterexamples(backreach_single, max_index=None, params=None):
     total_runtime = 0.0
 
     with multiprocessing.Pool(get_num_cores(), initializer=init_process, initargs=(q, )) as pool:
-        res_list = pool.map(backreach_single, range(num_cases))
+        res_list = pool.map(backreach_single, range(num_cases), chunksize=1)
         max_runtime = res_list[0]
 
         for res in res_list:
