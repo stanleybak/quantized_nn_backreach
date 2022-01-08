@@ -321,6 +321,7 @@ def backreach_single(arg, parallel=True, plot=False) -> Optional[BackreachResult
     try:
         rv = backreach_single_unwrapped(arg, parallel=parallel, plot=plot)
     except:
+        print("WARNING: Exception was raised!")
         traceback.print_exc()
         rv = None
 
