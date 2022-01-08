@@ -140,13 +140,14 @@ def run_network(alpha_prev, x, stdout=False):
 
     range_for_scaling, means_for_scaling = get_scaling()
 
-    tol = 1e-4
+    tol = 1e-2
     min_inputs = [0, -pi, -pi, 100, 0]
     max_inputs = [60760, pi, pi, 1200, 1200]
 
     # normalize input
     for i in range(5):
-        assert min_inputs[i] - tol <= x[i] <= max_inputs[i] + tol
+        assert min_inputs[i] - tol <= x[i] <= max_inputs[i] + tol, f"network input input {i} out of bounds. got " + \
+            f"{x[i]}, valid range: {min_inputs[i], max_inputs[i]}"
         
         x[i] = (x[i] - means_for_scaling[i]) / range_for_scaling[i]
 

@@ -8,7 +8,7 @@ from typing import List, Tuple
 import time
 import multiprocessing
 import pickle
-from math import pi, floor
+from math import pi, floor, atan2, sqrt
 from copy import deepcopy
 
 from settings import Quanta
@@ -92,7 +92,7 @@ def make_params(max_index=None):
 
     vel_ownship = (100, 1200)
     #vel_intruder = (0, 1200) # full range
-    vel_intruder = (0, 400)
+    vel_intruder = (0, 300)
 
     pos_quantum = Quanta.pos
     vel_quantum = Quanta.vel
@@ -169,7 +169,7 @@ def print_result(label, res):
           f"y_own={y_own}\nqtheta1={qtheta1}\nq_vown={q_vown}\nq_vint={q_vint}")
     print(f'num_popped: {num_popped}, unique_paths: {unique_paths}, has_counterexample: {unsafe}')
 
-def get_counterexamples(backreach_single, index=None, params=None):
+def get_counterexamples(backreach_single, max_index=None, params=None):
     """get all counterexamples at the current quantization"""
 
     global global_start_time
@@ -188,13 +188,12 @@ def get_counterexamples(backreach_single, index=None, params=None):
     else:
         print("Making params...")
         start = time.perf_counter()
-        global_params_list = make_params(index)
+        global_params_list = make_params(max_index)
         diff = time.perf_counter() - start
 
-        if index is not None:
-            print("WARNING: using UP TO INDEX")
-            time.sleep(2)
-            global_params_list = global_params_list[:index+1]
+        if max_index is not None:
+            print(f"WARNING: using params up to max_index={max_index}")
+            global_params_list = global_params_list[:max_index+1]
 
         num_cases = len(global_params_list)
         print(f"Made params for {num_cases} cases in {round(diff, 2)} secs")
@@ -256,6 +255,7 @@ def is_real_counterexample(res):
     _, range_pt, radius = s.star.get_witness(get_radius=True)
 
     if radius < 1e-6:
+        print(f"chebeshev radius was too small ({radius}), skipping replay")
         return False
     
     pt = range_pt.copy()
@@ -265,7 +265,7 @@ def is_real_counterexample(res):
 
     pos_quantum = Quanta.pos
     mismatch_quantized = False
-    mismatch_continuous = True
+    mismatch_continuous = False
 
     for i in range(len(s.alpha_prev_list) - 1):
         net = s.alpha_prev_list[-(i+1)]
@@ -280,9 +280,13 @@ def is_real_counterexample(res):
         qstate = (qdx, qdy, q_theta1, s.qv_own, s.qv_int)
         q_cmd_out = get_cmd(net, *qstate)
 
-        c_theta1 = q_theta1 * Quanta.theta1 + Quanta.theta1 / 2
-        vown = s.qv_own * Quanta.vel + Quanta.vel / 2
-        vint = s.qv_int * Quanta.vel + Quanta.vel / 2
+        c_theta1 = atan2(pt[Star.VY_OWN], pt[Star.VX_OWN])
+        #quantized = q_theta1 * Quanta.theta1 + Quanta.theta1 / 2
+        
+        #vown = s.qv_own * Quanta.vel + Quanta.vel / 2
+        #vint = s.qv_int * Quanta.vel + Quanta.vel / 2
+        vown = sqrt(pt[Star.VX_OWN]**2 + pt[Star.VY_OWN]**2)
+        vint = sqrt(pt[Star.VX_INT]**2 + 0**2)
         cstate = (dx, dy, c_theta1, vown, vint)
 
         c_cmd_out = get_cmd_continuous(net, *cstate)
@@ -311,7 +315,10 @@ def is_real_counterexample(res):
         print("Quantized replay matched")
 
     if not mismatch_continuous:
-        print("Continuous replay matched")
+        print("Continuous replay matched! Real counterexample.")
+        print()
+        s.print_replay_init()
+        print()
 
     return not mismatch_continuous
 
@@ -326,6 +333,7 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
     # need to do this check before refining quanta
     for i, counterexample in enumerate(counterexamples):
         print(f"Replaying counterexample {i+1}/{len(counterexamples)}")
+        assert counterexample['counterexample'] is not None
         
         if is_real_counterexample(counterexample):
             print(f"Found reach counterexample at state: {counterexample['params']}")
@@ -380,10 +388,10 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
 
     return rv
 
-def run_all_parallel(backreach_single, index=None):
+def run_all_parallel(backreach_single, max_index=None):
     """loop over all cases"""
 
-    counterexamples, max_runtime = get_counterexamples(backreach_single, index=index)
+    counterexamples, max_runtime = get_counterexamples(backreach_single, max_index=max_index)
 
     print()
     print_result('longest runtime', max_runtime)
@@ -397,7 +405,7 @@ def run_all_parallel(backreach_single, index=None):
 
     #    print_result(f"Counterexample {i}", counterexample_res)
 
-    if index is None:
+    if max_index is None:
         if counterexamples:
             print("\nIncomplete analysis; had counterexamples.")
 
@@ -405,8 +413,36 @@ def run_all_parallel(backreach_single, index=None):
         else:
             print("\nDone! No counterexamples.")
     else:
-        print(f"Finished with index: {index}")
+        print(f"Finished up to max_index: {max_index}")
 
     if counterexamples:
         safe = refine_counterexamples(backreach_single, counterexamples)
         print(f"Proven safe after refining: {safe}")
+
+def refine_indices(backreach_single, counterexample_index_list):
+    """a debugging function, refine a specific set of counterexample indices"""
+
+    assert isinstance(counterexample_index_list, list)
+    assert counterexample_index_list, "empty list of counterexamples?"
+    assert isinstance(counterexample_index_list[0], int)
+    
+    max_index = max(counterexample_index_list)
+    print(f"in refine_indices(), max_index={max_index}")
+
+    print("Making params...")
+    start = time.perf_counter()
+    params = make_params(max_index)
+    num_cases = len(params)
+    diff = time.perf_counter() - start
+
+    print(f"Made params for {num_cases} cases in {round(diff, 2)} secs")
+
+    params = [params[index] for index in counterexample_index_list]
+
+    new_counterexamples, _ = get_counterexamples(backreach_single, params=params)
+    rv = True
+    
+    if new_counterexamples:
+        rv = refine_counterexamples(backreach_single, new_counterexamples)
+
+    print(f"Finished refine_indices. Result was safe={rv}")

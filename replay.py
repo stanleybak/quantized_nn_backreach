@@ -148,18 +148,22 @@ def state8_to_qinput_qstate(state8, stdout=False):
     # psi should be 
     theta1 = np.arctan2(vyo, vxo) ## theta 1 is using ownship!!
 
-    print(f"in state8_to_qstate5, real theta1: {theta1}")
+    if stdout:
+        print(f"in state8_to_qstate5, real theta1: {theta1}")
 
     assert abs(vyi) < 1e-6
     assert vxi >= 0
     theta2 = 0
     theta1 = quantize(theta1, theta1_quantum)
 
-    print(f"quantized theta1: {theta1}")
+    if stdout:
+        print(f"quantized theta1: {theta1}")
 
     theta1_deg = theta1 * 360/(2*math.pi)
-    print(f"theta1 quantized: {round(theta1_deg, 3)} deg")
-    print(f"ownship vx / vy = {vxo}, {vyo}")
+
+    if stdout:
+        print(f"theta1 quantized: {round(theta1_deg, 3)} deg")
+        print(f"ownship vx / vy = {vxo}, {vyo}")
 
     psi = theta2 - theta1
 
@@ -239,7 +243,7 @@ class State:
     'state of execution container'
 
     nets = load_networks()
-    plane_size = 1500
+    plane_size = 2500
 
     nn_update_rate = 1.0
     dt = 1.0
@@ -460,12 +464,14 @@ class State:
             assert abs(self.next_nn_update) < tol, f"time step doesn't sync with nn update time. " + \
                       f"next update: {self.next_nn_update}"
 
-            print(f"\nupdating nn command. Using network #{self.command}")
+            if stdout:
+                print(f"\nupdating nn command. Using network #{self.command}")
 
             # update command
             self.update_command(stdout=stdout)
 
-            print(f"nn output cmd was {self.command}")
+            if stdout:
+                print(f"nn output cmd was {self.command}")
 
             self.next_nn_update = State.nn_update_rate
 
@@ -480,7 +486,8 @@ class State:
 
         self.state8 = time_elapse_mat @ self.state8
 
-        print(self.state8)
+        if stdout:
+            print(f"state8: {self.state8}")
 
     def simulate(self, cmd_list, stdout=False):
         '''simulate system
@@ -531,8 +538,9 @@ class State:
         qinput, qstate = state8_to_qinput_qstate(self.state8, stdout=stdout)
         rho, theta, psi, v_own, v_int = qinput
 
-        print(f"state8: {self.state8}")
-        print(f"qinput: {rho, theta, psi, v_own, v_int}")
+        if stdout:
+            print(f"state8: {self.state8}")
+            print(f"qinput: {rho, theta, psi, v_own, v_int}")
 
         # 0: rho, distance
         # 1: theta, angle to intruder relative to ownship heading
@@ -576,10 +584,10 @@ def plot(s, save_mp4=False):
     print(f"Plotting state with min_dist: {round(s.min_dist, 2)} and " + \
           f"final dx: {round(dx, 1)}, dy: {round(dy, 1)}, dist: {round(dist, 2)}")
     
-    fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(8, 8))
+    fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(12, 8))
     axes.axis('equal')
 
-    axes.set_title("ACAS Xu Simulations")
+    axes.set_title("ACAS Xu Simulation")
     axes.set_xlabel('X Position (ft)')
     axes.set_ylabel('Y Position (ft)')
 
@@ -656,7 +664,7 @@ def plot(s, save_mp4=False):
     my_anim = animation.FuncAnimation(fig, animate, frames=num_frames, interval=interval, blit=True, repeat=True)
 
     if save_mp4:
-        writer = animation.writers['ffmpeg'](fps=50, metadata=dict(artist='Stanley Bak'), bitrate=1800)
+        writer = animation.writers['ffmpeg'](fps=15, metadata=dict(artist='Stanley Bak'), bitrate=1800)
 
         my_anim.save('sim.mp4', writer=writer)
     else:
@@ -666,20 +674,20 @@ def main():
     'main entry point'
 
     global skip_quantization
-    try_without_quantization = False
+    try_without_quantization = True
     
     ###################
-    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0]
-    qtheta1 = 150
-    qv_own = 2
-    qv_int = 6
-    # chebyshev center radius: 0.008967713900563709
-    end = np.array([-237.26730088, -499.99103229,   23.3378827 ,  -97.24769204,
-              0.        ,  347.37848551])
-    start = np.array([ -2883.2227592 ,   7157.87235025,    -68.84805521,    -72.53768449,
-           -33348.33460877,    347.37848551])
-    ##################
+    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0]
+    qtheta1 = 311
+    qv_own = 11
+    qv_int = 39
+    # chebeshev center radius: 0.0745862895428716
+    end = np.array([ -99.92541371, -499.92541371,   74.1164437 ,  -82.42611738,
+              0.        ,  390.10329256])
+    start = np.array([ -5360.83116819,   7007.87669426,    -65.21523383,    -89.63417501,
+           -40570.74242582,    390.10329256])
 
+    ##################
 
     skip_checks = True
         
@@ -688,7 +696,6 @@ def main():
         skip_checks = True
         #alpha_prev_list = []
 
-        
     theta1_quantum = Quanta.theta1
         
     q_theta1 = qtheta1 * theta1_quantum + theta1_quantum / 2 
@@ -698,6 +705,9 @@ def main():
 
     own_vel = math.sqrt(vx**2 + vy**2)
     int_vel = math.sqrt(vxi**2)
+
+    print(f"init own vel: {own_vel}")
+    print(f"init int vel: {int_vel}")
 
     if not skip_quantization and not skip_checks:
         # double-check quantization matches expectation
@@ -727,7 +737,7 @@ def main():
     init_vec = [start[0], start[1], start[2], start[3], start[4], 0, start[5], 0]
 
     # run time backwards N seconds
-    rewind_seconds = 0
+    rewind_seconds = 40
 
     if rewind_seconds != 0:
         a_mat = get_time_elapse_mat(0, -rewind_seconds)
@@ -741,8 +751,8 @@ def main():
 
     s.command = alpha_prev_list[-1]
     
-    s.simulate(cmd_list, stdout=True)
-    print("\nSimulation completed.")
+    s.simulate(cmd_list, stdout=False)
+    print("Simulation completed.\n")
 
     if not skip_checks:
 
@@ -767,6 +777,12 @@ def main():
         assert difference < 1e-2, f"end state mismatch. difference was {difference}"
         print("end states were close enough")
     else:
+        got_cmds = s.commands[:3]
+        expected_cmds = list(reversed(alpha_prev_list[:-1]))[:3]
+        
+        print(f"Got first few commands: {got_cmds}")
+        print(f"Expected first few commands: {expected_cmds}")
+        
         print("WARNING: skipped sanity checks on replay")
 
     if rewind_seconds != 0:
@@ -774,7 +790,8 @@ def main():
         print("WARNING: rewind_seconds != 0")
         
     # optional: do plot
-    plot(s, save_mp4=False)
+    #plot(s, save_mp4=False)
+    plot_image(s)
 
 if __name__ == "__main__":
     main()
