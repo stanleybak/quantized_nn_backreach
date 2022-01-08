@@ -177,6 +177,7 @@ def get_counterexamples(backreach_single, index=None, params=None):
         print(f"Using passed-in params (num: {num_cases})")
 
     else:
+        print("Making params...")
         start = time.perf_counter()
         global_params_list = make_params()
         diff = time.perf_counter() - start
