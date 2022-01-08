@@ -11,6 +11,8 @@ import pickle
 from math import pi, floor, atan2, sqrt
 from copy import deepcopy
 
+import matplotlib.pyplot as plt
+
 from settings import Quanta
 from util import to_time_str, get_num_cores, is_init_qx_qy
 from timerutil import Timers
@@ -214,6 +216,10 @@ def get_counterexamples(backreach_single, max_index=None, params=None):
         max_runtime = res_list[0]
 
         for res in res_list:
+            if res is None:
+                print("Warning: res was None")
+                continue
+            
             if res['counterexample'] is not None:
                 counterexamples.append(res)
 
@@ -469,3 +475,29 @@ def refine_indices(backreach_single, counterexample_index_list):
         rv = refine_counterexamples(backreach_single, new_counterexamples)
 
     print(f"Finished refine_indices. Result was safe={rv}")
+
+def run_single_case(backreach_single, index, plot=False):
+    """test a single (difficult) case"""
+
+    print("running single...")
+
+    start = time.perf_counter()
+    params = make_params(index+1)
+    num_cases = len(params)
+    diff = time.perf_counter() - start
+
+    print(f"Made params for {num_cases} cases in {round(diff, 2)} secs")
+
+    tup = params[index]
+
+    Timers.tic('top')
+    res = backreach_single(tup, parallel=False, plot=plot)
+    Timers.toc('top')
+    Timers.print_stats()
+
+    if res is not None:
+        print(f"popped: {res['num_popped']}")
+        print(f"unique_paths: {res['unique_paths']}")
+
+    if plot:
+        plt.show()

@@ -7,6 +7,7 @@ from typing import List, Tuple, Dict, TypedDict, Optional
 import time
 from copy import deepcopy
 from math import floor, ceil
+import traceback
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -17,10 +18,10 @@ from dubins import init_to_constraints, get_time_elapse_mat
 from util import make_qstar, is_init_qx_qy
 from networks import get_cmd
 
-from timerutil import timed, Timers
+from timerutil import timed
 from settings import Quanta
 from parallel import run_all_parallel, increment_index, shared_num_counterexamples, \
-                     worker_had_counterexample, refine_indices
+                     worker_had_counterexample, refine_indices, run_single_case
 
 class State():
     """state of backreach container
@@ -317,6 +318,17 @@ class BackreachResult(TypedDict):
 def backreach_single(arg, parallel=True, plot=False) -> Optional[BackreachResult]:
     """run backreachability from a single symbolic state"""
 
+    try:
+        rv = backreach_single_unwrapped(arg, parallel=parallel, plot=plot)
+    except:
+        traceback.print_exc()
+        rv = None
+
+    return rv
+
+def backreach_single_unwrapped(arg, parallel=True, plot=False) -> Optional[BackreachResult]:
+    """run backreachability from a single symbolic state"""
+
     if parallel:
         index, params = increment_index()
     else:
@@ -349,6 +361,12 @@ def backreach_single(arg, parallel=True, plot=False) -> Optional[BackreachResult
     while work and rv['counterexample'] is None:
         s = work.pop()
         popped += 1
+
+        if parallel == False and popped % 100 == 0:
+            lens = [len(w.alpha_prev_list) for w in work]
+            max_len = max(lens)
+            
+            print(f"popped {popped}, unique_paths: {len(deadends)}, remaining_work: {len(work)}, max_len: {max_len}")
 
         predecessors = s.get_predecessors(plotter=plotter)
 
@@ -388,38 +406,13 @@ def backreach_single(arg, parallel=True, plot=False) -> Optional[BackreachResult
 
     return rv
 
-def run_single_case():
-    """test a single (difficult) case"""
-
-    print("running single...")
-
-    alpha_prev=4
-    x_own=(-3, -2)
-    y_own=(-4, -3)
-    qtheta1=152
-    q_vown=2
-    q_vint=7
-    #num_popped: 1043422, unique_paths: 5551, has_counterexample: False
-
-    Timers.tic('top')
-    params = (alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint)
-    res = backreach_single(params, parallel=False, plot=False)
-    Timers.toc('top')
-    Timers.print_stats()
-
-    if res is not None:
-        print(f"popped: {res['num_popped']}")
-        print(f"unique_paths: {res['unique_paths']}")
-
-    plt.show()
-
 def main():
     """main entry point"""
 
     Quanta.init_cmd_quantum_list()
 
     # emacs hard-warp command: M+x fill-paragraph
-    #run_single_case()
+    #run_single_case(backreach_single, index=55)
     #run_all_parallel(backreach_single, max_index=1822)
     run_all_parallel(backreach_single)
 
