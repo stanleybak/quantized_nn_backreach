@@ -10,7 +10,7 @@ from math import pi
 class Quanta:
     pos = 250.0 #250
     vel = 50.0 # 50
-    theta1_deg = 1.5 #1.5 # should divide 1.5 degrees evenly
+    theta1_deg = 0.75 #1.5 # should divide 1.5 degrees evenly
 
     theta1 = 2*pi / (360 / theta1_deg)
 
