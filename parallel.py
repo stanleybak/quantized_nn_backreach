@@ -55,7 +55,9 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
                 longest: Tuple[float, int] = (now - shared_cur_index_start_time[0], 0)
 
                 for i in range(get_num_cores()):
-                    cur: Tuple[float, int] = (now - shared_cur_index_start_time[i], i)
+                    index = shared_cur_index[i]
+                    runtime = now - shared_cur_index_start_time[i]
+                    cur: Tuple[float, int] = (runtime, index)
 
                     if cur > longest:
                         longest = cur
@@ -479,7 +481,7 @@ def refine_indices(backreach_single, counterexample_index_list):
 def run_single_case(backreach_single, index, plot=False):
     """test a single (difficult) case"""
 
-    print("running single...")
+    print("running single with index={index}...")
 
     start = time.perf_counter()
     params = make_params(index+1)

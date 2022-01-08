@@ -413,9 +413,9 @@ def main():
     Quanta.init_cmd_quantum_list()
 
     # emacs hard-warp command: M+x fill-paragraph
-    #run_single_case(backreach_single, index=55)
+    run_single_case(backreach_single, index=38)
     #run_all_parallel(backreach_single, max_index=1822)
-    run_all_parallel(backreach_single)
+    #run_all_parallel(backreach_single)
 
     #refine_indices(backreach_single, counterexample_indices)
 
