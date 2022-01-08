@@ -422,8 +422,8 @@ def main():
     Quanta.init_cmd_quantum_list()
 
     #run_single_case()
-    run_all_parallel(backreach_single, index=373)
-
+    #run_all_parallel(backreach_single, index=373)
+    run_all_parallel(backreach_single)
 
     # 373.
 if __name__ == "__main__":
