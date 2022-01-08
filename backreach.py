@@ -370,7 +370,7 @@ def backreach_single(arg, parallel=True, plot=False) -> Optional[BackreachResult
                     if parallel:
                         with shared_num_counterexamples.get_lock():
                             shared_num_counterexamples.value += 1
-                            print(f"\nIndex {index}. found Counterexample (count: {shared_num_counterexamples.value}) ",
+                            print(f"\nIndex {index} found counterexample. Count: {shared_num_counterexamples.value} ",
                                   end='', flush=True)
 
                     break

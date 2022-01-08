@@ -3,6 +3,6 @@ xtick.labelsize : 14
 ytick.labelsize : 14
 
 axes.labelsize : 20
-axes.titlesize : 28
+axes.titlesize : 26
     
 path.simplify : False 

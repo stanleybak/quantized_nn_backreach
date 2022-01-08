@@ -46,7 +46,7 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
                 shared_cur_index_start_time[i] = now
                 shared_cur_index[i] = 0
 
-        if next_index % 5000 == 0:
+        if next_index % 1000 == 0:
 
             if next_index > 0:
                 # print longest-running job
@@ -61,7 +61,8 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
                 runtime, index = longest
 
                 if len(shared_counterexamples_list) > 0:
-                    print(f"Counterexamples ({len(shared_counterexamples_list)}): {shared_counterexamples_list}")
+                    print(f"\nCounterexamples ({len(shared_counterexamples_list)}): {shared_counterexamples_list}",
+                          end='')
 
                 print(f"\nLongest Running Job: index={index} ({round(runtime, 2)}s)")
 
@@ -74,7 +75,7 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
             print(f"{round(percent, 2)}% Elapsed: {to_time_str(elapsed)}, ETA: {to_time_str(eta)} " + \
                   f"{next_index}/{num_cases}: ", end='', flush=True)
 
-    if next_index % 100 == 0:
+    if next_index % 20 == 0:
         print(".", end='', flush=True)
 
     params = global_params_list[next_index]
@@ -93,6 +94,8 @@ def make_params(max_index=None):
     vel_ownship = (100, 1200)
     #vel_intruder = (0, 1200) # full range
     vel_intruder = (0, 300)
+
+    print(f"Making params with vel_intruder={vel_intruder} and max_index={max_index}...")
 
     pos_quantum = Quanta.pos
     vel_quantum = Quanta.vel
@@ -186,7 +189,6 @@ def get_counterexamples(backreach_single, max_index=None, params=None):
         print(f"Using passed-in params (num: {num_cases})")
 
     else:
-        print("Making params...")
         start = time.perf_counter()
         global_params_list = make_params(max_index)
         diff = time.perf_counter() - start
@@ -341,7 +343,8 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
 
     qstates = [] # qstates after refinement
 
-    levels = ['pos', 'vel', 'pos', 'vel', 'pos', 'vel', 'theta1', 'pos', 'vel', 'theta1', 'pos', 'vel', 'theta1']
+    levels = ['pos', 'pos', 'vel', 'pos', 'vel', 'pos', 'vel', 'theta1', 'pos', 'vel', 'theta1',
+              'pos', 'vel', 'theta1', 'pos', 'vel', 'pos', 'vel', 'pos', 'vel']
 
     if level >= len(levels):
         print("Refinement reached max level: {len(levels)}")
@@ -363,28 +366,49 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
 
     for counterexample in counterexamples:
         alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint = counterexample['params']
+        
+        _, _, radius = s.star.get_witness(get_radius=True)
+
+        if radius < 1e-6: # radius was too small to be a real counterexample (replay fails due to numerics)
+            continue
+
+        cqstates = [] # candidate qstates for the next iteration
 
         # add refined states to qstates
         if levels[level] == 'pos':
-            qstates.append((alpha_prev, 2*x_own, 2*y_own, qtheta1, q_vown, q_vint))
-            qstates.append((alpha_prev, 2*x_own + 1, 2*y_own, qtheta1, q_vown, q_vint))
-            qstates.append((alpha_prev, 2*x_own, 2*y_own + 1, qtheta1, q_vown, q_vint))
-            qstates.append((alpha_prev, 2*x_own + 1, 2*y_own + 1, qtheta1, q_vown, q_vint))
+            cqstates.append((alpha_prev, 2*x_own, 2*y_own, qtheta1, q_vown, q_vint))
+            cqstates.append((alpha_prev, 2*x_own + 1, 2*y_own, qtheta1, q_vown, q_vint))
+            cqstates.append((alpha_prev, 2*x_own, 2*y_own + 1, qtheta1, q_vown, q_vint))
+            cqstates.append((alpha_prev, 2*x_own + 1, 2*y_own + 1, qtheta1, q_vown, q_vint))
         elif levels[level] == 'vel':
-            qstates.append((alpha_prev, x_own, y_own, qtheta1, 2*q_vown, 2*q_vint))
-            qstates.append((alpha_prev, x_own, y_own, qtheta1, 2*q_vown+1, 2*q_vint))
-            qstates.append((alpha_prev, x_own, y_own, qtheta1, 2*q_vown, 2*q_vint+1))
-            qstates.append((alpha_prev, x_own, y_own, qtheta1, 2*q_vown+1, 2*q_vint+1))
+            cqstates.append((alpha_prev, x_own, y_own, qtheta1, 2*q_vown, 2*q_vint))
+            cqstates.append((alpha_prev, x_own, y_own, qtheta1, 2*q_vown+1, 2*q_vint))
+            cqstates.append((alpha_prev, x_own, y_own, qtheta1, 2*q_vown, 2*q_vint+1))
+            cqstates.append((alpha_prev, x_own, y_own, qtheta1, 2*q_vown+1, 2*q_vint+1))
         else:
             assert levels[level] == 'theta1'
-            qstates.append((alpha_prev, x_own, y_own, 2*qtheta1, q_vown, q_vint))
-            qstates.append((alpha_prev, x_own, y_own, 2*qtheta1 + 1, q_vown, q_vint))
+            cqstates.append((alpha_prev, x_own, y_own, 2*qtheta1, q_vown, q_vint))
+            cqstates.append((alpha_prev, x_own, y_own, 2*qtheta1 + 1, q_vown, q_vint))
 
-    new_counterexamples, _ = get_counterexamples(backreach_single, params=qstates)
+        for qstate in cqstates:
+            x_own = qstate[1]
+            y_own = qstate[2]
+
+            # make sure it's still an initial state after refinement
+            if is_init_qx_qy(x_own, y_own):
+                qstates.append(qstate)
+
     rv = True
-    
-    if new_counterexamples:
-        rv = refine_counterexamples(backreach_single, new_counterexamples, level=level + 1)
+        
+    if not qstates:
+        print("no more qstates after trimming initial states, safe!")
+    else:
+        new_counterexamples, _ = get_counterexamples(backreach_single, params=qstates)
+
+        if new_counterexamples:
+            rv = refine_counterexamples(backreach_single, new_counterexamples, level=level + 1)
+        else:
+            print("no new counterexamples found, safe!")
 
     return rv
 
@@ -429,7 +453,6 @@ def refine_indices(backreach_single, counterexample_index_list):
     max_index = max(counterexample_index_list)
     print(f"in refine_indices(), max_index={max_index}")
 
-    print("Making params...")
     start = time.perf_counter()
     params = make_params(max_index)
     num_cases = len(params)

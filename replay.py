@@ -243,7 +243,7 @@ class State:
     'state of execution container'
 
     nets = load_networks()
-    plane_size = 2500
+    plane_size = 3500
 
     nn_update_rate = 1.0
     dt = 1.0
@@ -287,13 +287,17 @@ class State:
         self.artists_dict['lc0'].set_visible(True)
         self.artists_dict['plane0'].set_visible(vis)
         
-    def update_artists(self, axes):
+    def update_artists(self, axes, plane_index=None):
         '''update artists in self.artists_dict to be consistant with self.vec, returns a list of artists'''
 
         assert self.artists_dict
         rv = []
 
-        x1, y1, vx1, vy1, x2, y2, vx2, vy2 = self.state8
+        if plane_index is None:
+            x1, y1, vx1, vy1, x2, y2, vx2, vy2 = self.state8
+        else:
+            x1, y1, vx1, vy1, x2, y2, vx2, vy2 = self.vec_list[plane_index]
+            
         theta1 = math.atan2(vy1, vx1)
         theta2 = math.atan2(vy2, vx2)
 
@@ -355,6 +359,8 @@ class State:
 
             for i, vec in enumerate(self.vec_list):
                 if np.linalg.norm(vec - self.state8) < 1e-6:
+                    print(f".updating lc, breaking at index {i}")
+                    print(f"lc visible: {lc.get_visible()}")
                     # done
                     break
 
@@ -402,7 +408,7 @@ class State:
             lc.set_lw(lws)
             lc.set_color(colors)
 
-    def make_artists(self, axes, show_intruder):
+    def make_artists(self, axes, show_intruder, animated=True):
         'make self.artists_dict'
 
         assert self.vec_list
@@ -419,16 +425,16 @@ class State:
         for i, pos_list in enumerate(pos_lists):
             x, y, theta = pos_list[0]
             
-            l = axes.plot(*zip(*pos_list), f'c-', lw=0, zorder=1)[0]
+            l = axes.plot(*zip(*pos_list), 'c-', lw=0, zorder=1)[0]
             l.set_visible(False)
             self.artists_dict[f'line{i}'] = l
 
             if i == 0:
-                lc = LineCollection([], lw=2, animated=True, color='k', zorder=1)
+                lc = LineCollection([], lw=2, animated=animated, color='k', zorder=1)
                 axes.add_collection(lc)
                 self.artists_dict[f'lc{i}'] = lc
 
-                int_lc = LineCollection([], lw=2, animated=True, color='k', zorder=1)
+                int_lc = LineCollection([], lw=2, animated=animated, color='k', zorder=1)
                 axes.add_collection(int_lc)
                 self.artists_dict[f'int_lc{i}'] = int_lc
 
@@ -670,6 +676,69 @@ def plot(s, save_mp4=False):
     else:
         plt.show()
 
+def plot_paper_image(s, title):
+    """plot the simulation image for the paper (and print table data)"""
+
+    # print latex table info
+    for i, qinput in enumerate(s.qinputs[40:]):
+        net, state8, = qinput
+        print(f"{i}. {}")
+
+    ######
+    
+    init_plot()
+    dx = s.state8[0] - s.state8[4]
+    dy = s.state8[1] - s.state8[5]
+    dist = math.sqrt(dx*dx + dy*dy)
+    print(f"Plotting state with min_dist: {round(s.min_dist, 2)} and " + \
+          f"final dx: {round(dx, 1)}, dy: {round(dy, 1)}, dist: {round(dist, 2)}")
+    
+    fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(10, 7))
+    axes.axis('equal')
+
+    axes.set_title(title)
+    axes.set_xlabel('X Position (ft)')
+    axes.set_ylabel('Y Position (ft)')
+
+    custom_lines = [Line2D([0], [0], color='g', lw=2),
+                    Line2D([0], [0], color='b', lw=2),
+                    Line2D([0], [0], color='k', lw=2),
+                    Line2D([0], [0], color='c', lw=2),
+                    Line2D([0], [0], color='r', lw=2)]
+
+    axes.legend(custom_lines, ['Strong Left', 'Weak Left', 'Clear of Conflict', 'Weak Right', 'Strong Right'], \
+                fontsize=14, loc='lower left')
+    
+    s.make_artists(axes, show_intruder=True, animated=False)
+    s.set_plane_visible(True)
+
+    #for a in s.artists_list():
+    #    a.set_visible(True)
+
+    #s.state8 = s.vec_list[80]
+    s.update_artists(axes, plane_index=0)
+
+    init_state8 = s.vec_list[0]
+    xown, yown = init_state8[0], init_state8[1]
+    xint, yint = init_state8[4], init_state8[5]
+
+    axes.text(xown, yown + 0.7*State.plane_size, 'Ownship', horizontalalignment='center', fontsize=16,
+                          verticalalignment='bottom')
+
+    axes.text(xint + 0.3*State.plane_size, yint + 0.7*State.plane_size, 'Intruder', horizontalalignment='center', fontsize=16,
+                      verticalalignment='bottom')
+
+    plt.tight_layout()
+
+    plot_to_screen = False
+
+    if plot_to_screen:
+        plt.show()
+    else:
+        filename = 'plot.png'
+        plt.savefig(filename)
+        print(f"saved image to {filename}")
+
 def main():
     'main entry point'
 
@@ -791,7 +860,8 @@ def main():
         
     # optional: do plot
     #plot(s, save_mp4=False)
-    plot_image(s)
+    title = f"Unsafe Simulation ($v_{{int}}$={round(int_vel, 2)} ft/sec)"
+    plot_paper_image(s, title)
 
 if __name__ == "__main__":
     main()
