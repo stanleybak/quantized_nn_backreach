@@ -97,7 +97,7 @@ def worker_had_counterexample(res):
 def make_params(max_index=None):
     """make params for parallel run"""
 
-    vel_ownship = (600, 1200)
+    vel_ownship = (1150, 1200) #(600, 1200)
     vel_intruder = (0, 1200) # full range
     #vel_intruder = (0, 300)
 

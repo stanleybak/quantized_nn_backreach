@@ -331,7 +331,6 @@ class State():
                                     prev_s.alpha_prev_list.append(prev_cmd)
                                     rv.append(prev_s)
                     else:
-
                         large_star = make_large_qstar(self.star, min_x, max_x, min_y, max_y)
 
                         if large_star.is_feasible() is not None:
@@ -465,7 +464,7 @@ def backreach_single_unwrapped(arg, parallel=True, plot=False) -> Optional[Backr
                 dx = (pt[Star.X_INT] - pt[Star.X_OWN])
                 dy = (0 - pt[Star.Y_OWN])
                 
-                if dx**2 + dy**2 > 10000**2:
+                if dx**2 + dy**2 > Quanta.counterexample_start_dist**2:
                     rv['counterexample'] = deepcopy(p)
 
                     if parallel:

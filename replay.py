@@ -359,8 +359,6 @@ class State:
 
             for i, vec in enumerate(self.vec_list):
                 if np.linalg.norm(vec - self.state8) < 1e-6:
-                    print(f".updating lc, breaking at index {i}")
-                    print(f"lc visible: {lc.get_visible()}")
                     # done
                     break
 
@@ -680,9 +678,9 @@ def plot_paper_image(s, title):
     """plot the simulation image for the paper (and print table data)"""
 
     # print latex table info
-    for i, qinput in enumerate(s.qinputs[40:]):
-        net, state8, = qinput
-        print(f"{i}. {}")
+    #for i, qinput in enumerate(s.qinputs[40:]):
+    #    net, state8, = qinput
+    #    print(f"{i}. {}")
 
     ######
     
@@ -739,13 +737,8 @@ def plot_paper_image(s, title):
         plt.savefig(filename)
         print(f"saved image to {filename}")
 
-def main():
-    'main entry point'
-
-    global skip_quantization
-    try_without_quantization = True
-    
-    ###################
+def slow_int_counterexample():
+    """slow int counterexample"""
     alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0]
     qtheta1 = 311
     qv_own = 11
@@ -756,6 +749,22 @@ def main():
     start = np.array([ -5360.83116819,   7007.87669426,    -65.21523383,    -89.63417501,
            -40570.74242582,    390.10329256])
 
+def main():
+    'main entry point'
+
+    global skip_quantization
+    try_without_quantization = True
+    
+    ###################
+    alpha_prev_list = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0]
+    qtheta1 = -30
+    qv_own = 15
+    qv_int = 23
+    # chebeshev center radius: 0.30832658553461134
+    end = np.array([ 312.80832659, -124.69167341,  768.02009873,  139.42313893,
+              0.        , 1189.41761831])
+    start = np.array([-13215.80276643,   4306.86834935,    564.2265763 ,   -539.390447  ,
+           -22598.93474783,   1189.41761831])
     ##################
 
     skip_checks = True
@@ -771,12 +780,6 @@ def main():
     cmd_list = [0] * (len(alpha_prev_list) - 1)
 
     _, _, vx, vy, _, vxi = start
-
-    own_vel = math.sqrt(vx**2 + vy**2)
-    int_vel = math.sqrt(vxi**2)
-
-    print(f"init own vel: {own_vel}")
-    print(f"init int vel: {int_vel}")
 
     if not skip_quantization and not skip_checks:
         # double-check quantization matches expectation
@@ -806,14 +809,26 @@ def main():
     init_vec = [start[0], start[1], start[2], start[3], start[4], 0, start[5], 0]
 
     # run time backwards N seconds
-    rewind_seconds = 40
+    rewind_seconds = 10#40
 
     if rewind_seconds != 0:
+        assert isinstance(rewind_seconds, int)
+        print(f"rewinding by {rewind_seconds} seconds")
         a_mat = get_time_elapse_mat(0, -rewind_seconds)
         init_vec = a_mat @ init_vec
 
         cmd_list = [cmd_list[0]] * rewind_seconds + cmd_list
     ########
+
+    own_vel = math.sqrt(vx**2 + vy**2)
+    int_vel = math.sqrt(vxi**2)
+    dx = init_vec[0] - init_vec[4]
+    dy = init_vec[1] - 0
+    init_rho = math.sqrt(dx**2 + dy**2)
+
+    print(f"init own vel: {own_vel}")
+    print(f"init int vel: {int_vel}")
+    print(f"init rho: {init_rho}")
     
     # run the simulation
     s = State(init_vec, save_states=True)
@@ -859,9 +874,9 @@ def main():
         print("WARNING: rewind_seconds != 0")
         
     # optional: do plot
-    #plot(s, save_mp4=False)
-    title = f"Unsafe Simulation ($v_{{int}}$={round(int_vel, 2)} ft/sec)"
-    plot_paper_image(s, title)
+    plot(s, save_mp4=False)
+    #title = f"Unsafe Simulation ($v_{{int}}$={round(int_vel, 2)} ft/sec)"
+    #plot_paper_image(s, title)
 
 if __name__ == "__main__":
     main()
