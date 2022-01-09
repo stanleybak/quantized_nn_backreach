@@ -315,6 +315,13 @@ def is_real_counterexample(res):
         qdx = floor(dx / pos_quantum)
         qdy = floor(dy / pos_quantum)
 
+        rho = sqrt(dx*dx + dy*dy)
+
+        if rho < 500:
+            print(f"forcing mismatch_continuous=False and breaking because rho ({rho}) < 500")
+            mismatch_continuous = False
+            break
+
         qstate = (qdx, qdy, q_theta1, s.qv_own, s.qv_int)
         q_cmd_out = get_cmd(net, *qstate)
 

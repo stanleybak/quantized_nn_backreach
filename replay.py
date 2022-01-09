@@ -684,12 +684,12 @@ def plot_paper_image(s, rewind_seconds, title):
     theta_deg = theta * 180 / math.pi
     psi_deg = psi * 180 / math.pi
         
-    print("\n% Auto-generated file")
-    print(f"%Initial state is $\\rho={rho}\\text{{ ft}}, \\theta={theta}\\text{{ deg}}, \\psi={psi}\\text{{ deg}}, " + \
-          f"v_{{own}}={v_own}\\text{{ ft/sec}}, v_{{int}}={v_int}\\text{{ ft/sec}}$.")
+    print("\n% Auto-generated")
+    print(f"% The unrounded initial state is $\\rho$ = {rho} ft, $\\theta$ = {theta} deg, $\\psi={psi}$ deg, " + \
+          f"$v_{{own}}$ = {v_own} ft/sec, and $v_{{int}}$ = {v_int} ft/sec.")
 
     print("\\toprule")
-    print("Step & $\\alpha_\\text{prev}$ & Command Out & $\\rho \\text{(ft)}$ & $\\theta$ \\text{(deg)} & $\\psi$ \\text{(deg)} \\\\")
+    print("Step & $\\alpha_\\text{prev}$ & Cmd & $\\rho$ (ft) & $\\theta$ (deg) & $\\psi$ (deg) \\\\")
     print("\\midrule")
 
     cmd_str = ["\\textsc{coc}", "\\textsc{wl}", "\\textsc{wr}", "\\textsc{sl}", "\\textsc{sr}"]
@@ -700,7 +700,7 @@ def plot_paper_image(s, rewind_seconds, title):
 
         theta_deg = theta * 180 / math.pi
         psi_deg = psi * 180 / math.pi
-        print(f"{i+1} & {cmd_str[net]} & {cmd_str[cmd]} & {round(rho, 1)} & {round(theta_deg, 2)} & {round(psi_deg, 2)} \\\\")
+        print(f"{i+1} & {cmd_str[net]} & {cmd_str[cmd]} & {rho:.1f} & {theta_deg:.2f} & {psi_deg:.2f} \\\\")
         dx = state8[0] - state8[4]
         dy = state8[1] - state8[5]
         
@@ -805,7 +805,7 @@ def main():
     try_without_quantization = True
     
     ###################
-    alpha_prev_list, qtheta1, qv_own, qv_int, end, start = slow_int_counterexample()
+    alpha_prev_list, qtheta1, qv_own, qv_int, end, start = fast_own_counterexample() #slow_int_counterexample()
     ##################
 
     skip_checks = True
@@ -917,8 +917,9 @@ def main():
         print("WARNING: rewind_seconds != 0")
         
     # optional: do plot
-    #plot(s, save_mp4=False)
-    title = f"Unsafe Simulation ($v_{{int}}$={round(int_vel, 2)} ft/sec)"
+    #plot(s, save_mp4=True)
+    #title = f"Unsafe Simulation ($v_{{int}}$={round(int_vel, 2)} ft/sec)"
+    title = f"Unsafe Simulation ($v_{{own}}$={round(own_vel, 2)} ft/sec)"
     plot_paper_image(s, rewind_seconds, title)
 
 if __name__ == "__main__":
