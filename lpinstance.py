@@ -43,7 +43,7 @@ def get_lp_params(alternate_lp_params=False):
         
         get_lp_params.alt_obj = params2
 
-        print(f"Using GLPK version: {glpk.glp_version()}")
+        #print(f"Using GLPK version: {glpk.glp_version()}")
         
     if alternate_lp_params:
         #glpk.glp_term_out(glpk.GLP_ON)

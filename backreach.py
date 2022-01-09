@@ -499,7 +499,7 @@ def main():
         # 477 is worst WHY?, 166 is 50 secs
         Quanta.single_case_timeout = 300
         # 
-        run_single_case(backreach_single, index=2318, plot=False)
+        run_single_case(backreach_single, index=949, plot=False)
         #run_all_parallel(backreach_single, max_index=1822)
     else:
         # on AWS
