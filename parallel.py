@@ -101,7 +101,9 @@ def worker_had_counterexample(res):
 def make_params(max_index=None):
     """make params for parallel run"""
 
-    # 1000-1200 is safe
+    # 1000-1200 is safe with 250, 50, 1.5, 950-100 is not!
+    #
+    
     vel_ownship = (950, 1000) # (600, 1200) ??
     vel_intruder = (0, 1200) # full range
     #vel_intruder = (0, 300)
@@ -184,7 +186,7 @@ def print_result(label, res):
           f"y_own={y_own}\nqtheta1={qtheta1}\nq_vown={q_vown}\nq_vint={q_vint}")
     print(f'num_popped: {num_popped}, unique_paths: {unique_paths}, has_counterexample: {unsafe}')
 
-def get_counterexamples(backreach_single, max_index=None, params=None):
+def get_counterexamples(backreach_single, indices=None, params=None):
     """get all counterexamples at the current quantization"""
 
     global global_start_time
@@ -202,13 +204,18 @@ def get_counterexamples(backreach_single, max_index=None, params=None):
         print(f"Using passed-in params (num: {num_cases})")
 
     else:
+        max_index = None
+
+        if indices is not None:
+            max_index = max(indices)
+        
         start = time.perf_counter()
         global_params_list = make_params(max_index)
         diff = time.perf_counter() - start
 
-        if max_index is not None:
-            print(f"WARNING: using params up to max_index={max_index}")
-            global_params_list = global_params_list[:max_index+1]
+        if indices is not None:
+            print(f"WARNING: using fixed indices up to max_index={max_index}")
+            global_params_list = [global_params_list[i] for i in indices]
 
         num_cases = len(global_params_list)
         print(f"Made params for {num_cases} cases in {round(diff, 2)} secs")
@@ -445,10 +452,10 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
 
     return rv
 
-def run_all_parallel(backreach_single, max_index=None):
+def run_all_parallel(backreach_single, indices=None):
     """loop over all cases"""
-
-    counterexamples, max_runtime = get_counterexamples(backreach_single, max_index=max_index)
+    
+    counterexamples, max_runtime = get_counterexamples(backreach_single, indices=indices)
 
     print()
     print_result('longest runtime', max_runtime)
@@ -462,7 +469,7 @@ def run_all_parallel(backreach_single, max_index=None):
 
     #    print_result(f"Counterexample {i}", counterexample_res)
 
-    if max_index is None:
+    if indices is None:
         if counterexamples:
             print("\nIncomplete analysis; had counterexamples.")
 
@@ -470,7 +477,7 @@ def run_all_parallel(backreach_single, max_index=None):
         else:
             print("\nDone! No counterexamples.")
     else:
-        print(f"Finished up to max_index: {max_index}")
+        print(f"Finished passed-in {len(indices)} indices.")
 
     if counterexamples:
         safe = refine_counterexamples(backreach_single, counterexamples)
