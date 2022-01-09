@@ -102,7 +102,7 @@ def make_params(max_index=None):
     """make params for parallel run"""
 
     # 1000-1200 is safe
-    vel_ownship = (900, 1000) # (600, 1200) ??
+    vel_ownship = (950, 1000) # (600, 1200) ??
     vel_intruder = (0, 1200) # full range
     #vel_intruder = (0, 300)
 
