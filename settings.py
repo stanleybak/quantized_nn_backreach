@@ -18,7 +18,7 @@ class Quanta:
     cmd_quantum_list: List[int] = [] # [0, 1, -1, 2, -2]
 
     # other settings
-    single_case_timeout = 60 #15 * 60
+    single_case_timeout = 120 #15 * 60
     counterexample_start_dist = 20000
 
     @classmethod

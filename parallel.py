@@ -25,6 +25,7 @@ global_params_list: List[Tuple[int, int, int, int, int, int]] = [] # assigned af
 global_process_id = -1 # assigned in init
 
 shared_next_index = multiprocessing.Value('i', 0) # the next index to be done
+shared_next_print_time = multiprocessing.Value('f', 0)
 shared_cur_index = multiprocessing.Array('i', get_num_cores()) # the current index for each core
 shared_cur_index_start_time = multiprocessing.Array('d', get_num_cores()) # the start time for the current job
 shared_num_counterexamples = multiprocessing.Value('i', 0)
@@ -48,8 +49,11 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
             for i in range(get_num_cores()):
                 shared_cur_index_start_time[i] = now
                 shared_cur_index[i] = 0
+                shared_next_print_time.value = now
 
-        if next_index % 500 == 0:
+        if now >= shared_next_print_time.value:
+            print_increment_secs = 5
+            shared_next_print_time.value = now + print_increment_secs
 
             if next_index > 0:
                 # print longest-running job
@@ -175,7 +179,7 @@ def print_result(label, res):
     unique_paths = res['unique_paths']
     unsafe = res['counterexample'] is not None
 
-    print(f"{label} ({round(diff, 2)}) for:\nalpha_prev={alpha_prev}\nx_own={x_own}\n" + \
+    print(f"{label} ({round(diff, 2)}) (index: {index}) for:\nalpha_prev={alpha_prev}\nx_own={x_own}\n" + \
           f"y_own={y_own}\nqtheta1={qtheta1}\nq_vown={q_vown}\nq_vint={q_vint}")
     print(f'num_popped: {num_popped}, unique_paths: {unique_paths}, has_counterexample: {unsafe}')
 
@@ -276,7 +280,7 @@ def is_real_counterexample(res):
     _, range_pt, radius = s.star.get_witness(get_radius=True)
 
     if radius < 1e-6:
-        print(f"chebeshev radius was too small ({radius}), skipping replay")
+        #print(f"chebeshev radius was too small ({radius}), skipping replay")
         return False
     
     pt = range_pt.copy()
@@ -313,12 +317,12 @@ def is_real_counterexample(res):
         c_cmd_out = get_cmd_continuous(net, *cstate)
         
         if q_cmd_out != expected_cmd and not mismatch_quantized:
-            print(f"Quantized mismatch at step {i+1}. got cmd {q_cmd_out}, expected cmd {expected_cmd}")
+            #print(f"Quantized mismatch at step {i+1}. got cmd {q_cmd_out}, expected cmd {expected_cmd}")
             mismatch_quantized = True
 
         if c_cmd_out != expected_cmd and not mismatch_continuous:
-            print(f"Non-quantized mismatch at step {i+1}/{len(s.alpha_prev_list) - 1}. " + \
-                  f"got cmd {c_cmd_out}, expected cmd {expected_cmd}")
+            #print(f"Non-quantized mismatch at step {i+1}/{len(s.alpha_prev_list) - 1}. " + \
+            #      f"got cmd {c_cmd_out}, expected cmd {expected_cmd}")
             mismatch_continuous = True
 
         if mismatch_quantized and mismatch_continuous:
@@ -332,8 +336,8 @@ def is_real_counterexample(res):
         delta_q_theta = Quanta.cmd_quantum_list[expected_cmd]# * theta1_quantum
         q_theta1 += delta_q_theta
 
-    if not mismatch_quantized:
-        print("Quantized replay matched")
+    if mismatch_quantized:
+        print("Warning: Quantized replay DOES NOT match")
 
     if not mismatch_continuous:
         print("Continuous replay matched! Real counterexample.")
@@ -356,7 +360,7 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
         print(f"Replaying counterexample {i+1}/{len(counterexamples)}")
 
         if counterexample['timeout']:
-            print("was timeout")
+            #print("was timeout")
             continue
         
         assert counterexample['counterexample'] is not None
@@ -367,7 +371,7 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
 
     qstates = [] # qstates after refinement
 
-    levels = ['pos', 'pos', 'vel', 'pos', 'vel', 'pos', 'vel', 'theta1', 'pos', 'vel', 'theta1',
+    levels = ['pos', 'vel', 'pos', 'vel', 'pos', 'vel', 'theta1', 'pos', 'vel', 'theta1',
               'pos', 'vel', 'theta1', 'pos', 'vel', 'pos', 'vel', 'pos', 'vel']
 
     if level >= len(levels):
