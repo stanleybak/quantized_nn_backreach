@@ -85,7 +85,7 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
             print(f"{round(percent, 2)}% Elapsed: {to_time_str(elapsed)}, ETA: {to_time_str(eta)} " + \
                   f"{next_index}/{num_cases}: ", end='', flush=True)
 
-    if next_index % 20 == 0:
+    if next_index % 100 == 0:
         print(".", end='', flush=True)
 
     params = global_params_list[next_index]
@@ -102,9 +102,9 @@ def make_params(max_index=None):
     """make params for parallel run"""
 
     # 1000-1200 is safe with 250, 50, 1.5, 950-100 is not!
-    #
+    # 950-100 safe with 250, 25, 1.5
     
-    vel_ownship = (950, 1000) # (600, 1200) ??
+    vel_ownship = (850, 950) # (600, 1200) ??
     vel_intruder = (0, 1200) # full range
     #vel_intruder = (0, 300)
 
