@@ -186,6 +186,10 @@ def print_result(label, res):
           f"y_own={y_own}\nqtheta1={qtheta1}\nq_vown={q_vown}\nq_vint={q_vint}")
     print(f'num_popped: {num_popped}, unique_paths: {unique_paths}, has_counterexample: {unsafe}')
 
+    if unsafe:
+        rad = res['counterexample'].star.get_witness(get_radius=True)[-1]
+        print(f"chebeshev radius of witness: {rad}")
+
 def get_counterexamples(backreach_single, indices=None, params=None):
     """get all counterexamples at the current quantization"""
 
@@ -379,7 +383,7 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
 
     qstates = [] # qstates after refinement
 
-    levels = ['pos', 'vel', 'pos', 'vel', 'pos', 'vel', 'theta1', 'pos', 'vel', 'theta1',
+    levels = ['vel', 'pos', 'vel', 'pos', 'vel', 'theta1', 'pos', 'vel', 'theta1',
               'pos', 'vel', 'theta1', 'pos', 'vel', 'pos', 'vel', 'pos', 'vel']
 
     if level >= len(levels):
@@ -406,11 +410,13 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
     for counterexample in counterexamples:
         alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint = counterexample['params']
         s = counterexample['counterexample']
-        if s is not None:
-            _, _, radius = s.star.get_witness(get_radius=True)
+        
+        #if s is not None:
+        #    _, _, radius = s.star.get_witness(get_radius=True)
+        #    print(f"rad: {radius}")
 
-            if radius < 1e-6: # radius was too small to be a real counterexample (replay fails due to numerics)
-                continue
+        #    if radius < 1e-6: # radius was too small to be a real counterexample (replay fails due to numerics)
+        #        continue
 
         cqstates = [] # candidate qstates for the next iteration
 
