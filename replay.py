@@ -756,15 +756,16 @@ def main():
     try_without_quantization = True
     
     ###################
-    alpha_prev_list = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0]
-    qtheta1 = -30
-    qv_own = 15
-    qv_int = 23
-    # chebeshev center radius: 0.30832658553461134
-    end = np.array([ 312.80832659, -124.69167341,  768.02009873,  139.42313893,
-              0.        , 1189.41761831])
-    start = np.array([-13215.80276643,   4306.86834935,    564.2265763 ,   -539.390447  ,
-           -22598.93474783,   1189.41761831])
+    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0]
+    qtheta1 = 271
+    qv_own = 141
+    qv_int = 191
+    # chebeshev center radius: 0.0862464378412363
+    end = np.array([ 125.08624644, -374.91375356,  832.65122387, -289.52569934,
+              0.        , 1199.91375356])
+    start = np.array([-27057.6501092 , -12592.0447243 ,    603.16465115,    642.90403234,
+           -43196.89512824,   1199.91375356])
+
     ##################
 
     skip_checks = True
@@ -809,7 +810,7 @@ def main():
     init_vec = [start[0], start[1], start[2], start[3], start[4], 0, start[5], 0]
 
     # run time backwards N seconds
-    rewind_seconds = 10#40
+    rewind_seconds = 40
 
     if rewind_seconds != 0:
         assert isinstance(rewind_seconds, int)

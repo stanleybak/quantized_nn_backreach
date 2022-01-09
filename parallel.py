@@ -103,6 +103,7 @@ def make_params(max_index=None):
 
     # 1000-1200 is safe with 250, 50, 1.5, 950-100 is not!
     # 900-1000 safe with 250, 25, 1.5, but not 850-900!
+    # 881.5 has unsafe case!!!!!!
     
     vel_ownship = (850, 900) # (600, 1200) ??
     vel_intruder = (0, 1200) # full range
@@ -368,8 +369,9 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
     print(f"\n####### level {level}: Refining {len(counterexamples)} counterexamples ######")
 
     # need to do this check before refining quanta
+    print("Replaying counterexamples...")
     for i, counterexample in enumerate(counterexamples):
-        print(f"Replaying counterexample {i+1}/{len(counterexamples)}")
+        #print(f"Replaying counterexample {i+1}/{len(counterexamples)}")
 
         if counterexample['timeout']:
             #print("was timeout")
