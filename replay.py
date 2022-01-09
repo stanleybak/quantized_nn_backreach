@@ -30,7 +30,6 @@ def init_plot():
     'initialize plotting style'
 
     #matplotlib.use('TkAgg') # set backend
-
     p = os.path.join('resources', 'bak_matplotlib.mlpstyle')
     plt.style.use(['bmh', p])
 
@@ -512,7 +511,7 @@ class State:
             rv = [self.state8.copy()]
 
         #self.min_dist = 0, math.sqrt((self.vec[0] - self.vec[3])**2 + (self.vec[1] - self.vec[4])**2), self.vec.copy()
-        prev_dist_sq = (self.state8[0] - self.state8[4])**2 + (self.state8[1] - self.state8[5])**2
+        min_dist_sq = (self.state8[0] - self.state8[4])**2 + (self.state8[1] - self.state8[5])**2
 
         while t + 1e-6 < tmax:
             self.step(stdout=stdout)
@@ -524,9 +523,10 @@ class State:
 
             t += State.dt
 
-            prev_dist_sq = cur_dist_sq
+            if cur_dist_sq < min_dist_sq:
+                min_dist_sq = cur_dist_sq
             
-        self.min_dist = math.sqrt(prev_dist_sq)
+        self.min_dist = math.sqrt(min_dist_sq)
         
         if self.save_states:
             self.vec_list = rv
@@ -674,13 +674,43 @@ def plot(s, save_mp4=False):
     else:
         plt.show()
 
-def plot_paper_image(s, title):
+def plot_paper_image(s, rewind_seconds, title):
     """plot the simulation image for the paper (and print table data)"""
 
     # print latex table info
-    #for i, qinput in enumerate(s.qinputs[40:]):
-    #    net, state8, = qinput
-    #    print(f"{i}. {}")
+    qinput = s.qinputs[rewind_seconds][3]
+            
+    rho, theta, psi, v_own, v_int = qinput
+    theta_deg = theta * 180 / math.pi
+    psi_deg = psi * 180 / math.pi
+        
+    print("\n% Auto-generated file")
+    print(f"%Initial state is $\\rho={rho}\\text{{ ft}}, \\theta={theta}\\text{{ deg}}, \\psi={psi}\\text{{ deg}}, " + \
+          f"v_{{own}}={v_own}\\text{{ ft/sec}}, v_{{int}}={v_int}\\text{{ ft/sec}}$.")
+
+    print("\\toprule")
+    print("Step & $\\alpha_\\text{prev}$ & Command Out & $\\rho \\text{(ft)}$ & $\\theta$ \\text{(deg)} & $\\psi$ \\text{(deg)} \\\\")
+    print("\\midrule")
+
+    cmd_str = ["\\textsc{coc}", "\\textsc{wl}", "\\textsc{wr}", "\\textsc{sl}", "\\textsc{sr}"]
+
+    for i, tup in enumerate(s.qinputs[rewind_seconds:]):
+        net, state8, qstate, qinput, cmd = tup
+        rho, theta, psi, v_own, v_int = qinput
+
+        theta_deg = theta * 180 / math.pi
+        psi_deg = psi * 180 / math.pi
+        print(f"{i+1} & {cmd_str[net]} & {cmd_str[cmd]} & {round(rho, 1)} & {round(theta_deg, 2)} & {round(psi_deg, 2)} \\\\")
+        dx = state8[0] - state8[4]
+        dy = state8[1] - state8[5]
+        
+        dist = math.sqrt(dx*dx + dy*dy)
+        #print(f"dx: {dx}, dy: {dy}, dist: {dist}")
+
+        if abs(dist - s.min_dist) < 1e-6:
+            break
+
+    print("\\bottomrule\n")
 
     ######
     
@@ -739,6 +769,7 @@ def plot_paper_image(s, title):
 
 def slow_int_counterexample():
     """slow int counterexample"""
+    
     alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0]
     qtheta1 = 311
     qv_own = 11
@@ -749,6 +780,24 @@ def slow_int_counterexample():
     start = np.array([ -5360.83116819,   7007.87669426,    -65.21523383,    -89.63417501,
            -40570.74242582,    390.10329256])
 
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start
+
+def fast_own_counterexample():
+    """fast ownship counterexample"""
+
+    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0]
+    qtheta1 = 271
+    qv_own = 141
+    qv_int = 191
+    
+    # chebeshev center radius: 0.0862464378412363
+    end = np.array([ 125.08624644, -374.91375356,  832.65122387, -289.52569934,
+              0.        , 1199.91375356])
+    start = np.array([-27057.6501092 , -12592.0447243 ,    603.16465115,    642.90403234,
+           -43196.89512824,   1199.91375356])
+
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start
+
 def main():
     'main entry point'
 
@@ -756,16 +805,7 @@ def main():
     try_without_quantization = True
     
     ###################
-    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0]
-    qtheta1 = 271
-    qv_own = 141
-    qv_int = 191
-    # chebeshev center radius: 0.0862464378412363
-    end = np.array([ 125.08624644, -374.91375356,  832.65122387, -289.52569934,
-              0.        , 1199.91375356])
-    start = np.array([-27057.6501092 , -12592.0447243 ,    603.16465115,    642.90403234,
-           -43196.89512824,   1199.91375356])
-
+    alpha_prev_list, qtheta1, qv_own, qv_int, end, start = slow_int_counterexample()
     ##################
 
     skip_checks = True
@@ -780,7 +820,30 @@ def main():
     q_theta1 = qtheta1 * theta1_quantum + theta1_quantum / 2 
     cmd_list = [0] * (len(alpha_prev_list) - 1)
 
+    init_vec = [start[0], start[1], start[2], start[3], start[4], 0, start[5], 0]
+
+    # run time backwards N seconds
+    rewind_seconds = 40
+
+    if rewind_seconds != 0:
+        assert isinstance(rewind_seconds, int)
+        print(f"rewinding by {rewind_seconds} seconds")
+        a_mat = get_time_elapse_mat(0, -rewind_seconds)
+        init_vec = a_mat @ init_vec
+
+        cmd_list = [cmd_list[0]] * rewind_seconds + cmd_list
+    ########
+
     _, _, vx, vy, _, vxi = start
+    own_vel = math.sqrt(vx**2 + vy**2)
+    int_vel = math.sqrt(vxi**2)
+    dx = init_vec[0] - init_vec[4]
+    dy = init_vec[1] - 0
+    init_rho = math.sqrt(dx**2 + dy**2)
+
+    print(f"init own vel: {own_vel}")
+    print(f"init int vel: {int_vel}")
+    print(f"init rho: {init_rho}")
 
     if not skip_quantization and not skip_checks:
         # double-check quantization matches expectation
@@ -806,35 +869,14 @@ def main():
         print(f"actual_qtheta1_deg = {actual_qtheta1_deg}")
         assert abs(actual_qtheta1 - q_theta1) < 1e-4, f"qtheta1 was actually {round(actual_qtheta1_deg, 3)}, " + \
             f"expected {round(q_theta1_deg, 3)}"
-
-    init_vec = [start[0], start[1], start[2], start[3], start[4], 0, start[5], 0]
-
-    # run time backwards N seconds
-    rewind_seconds = 40
-
-    if rewind_seconds != 0:
-        assert isinstance(rewind_seconds, int)
-        print(f"rewinding by {rewind_seconds} seconds")
-        a_mat = get_time_elapse_mat(0, -rewind_seconds)
-        init_vec = a_mat @ init_vec
-
-        cmd_list = [cmd_list[0]] * rewind_seconds + cmd_list
-    ########
-
-    own_vel = math.sqrt(vx**2 + vy**2)
-    int_vel = math.sqrt(vxi**2)
-    dx = init_vec[0] - init_vec[4]
-    dy = init_vec[1] - 0
-    init_rho = math.sqrt(dx**2 + dy**2)
-
-    print(f"init own vel: {own_vel}")
-    print(f"init int vel: {int_vel}")
-    print(f"init rho: {init_rho}")
     
     # run the simulation
     s = State(init_vec, save_states=True)
 
     s.command = alpha_prev_list[-1]
+
+    if skip_checks:
+        cmd_list.append(cmd_list[-1]) # simulate one extra step
     
     s.simulate(cmd_list, stdout=False)
     print("Simulation completed.\n")
@@ -875,9 +917,9 @@ def main():
         print("WARNING: rewind_seconds != 0")
         
     # optional: do plot
-    plot(s, save_mp4=False)
-    #title = f"Unsafe Simulation ($v_{{int}}$={round(int_vel, 2)} ft/sec)"
-    #plot_paper_image(s, title)
+    #plot(s, save_mp4=False)
+    title = f"Unsafe Simulation ($v_{{int}}$={round(int_vel, 2)} ft/sec)"
+    plot_paper_image(s, rewind_seconds, title)
 
 if __name__ == "__main__":
     main()
