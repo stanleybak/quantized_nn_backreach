@@ -104,7 +104,7 @@ def make_params(max_index=None):
     # 1000-1200 is safe with 250, 50, 1.5, 950-100 is not!
     # 950-100 safe with 250, 25, 1.5
     
-    vel_ownship = (850, 950) # (600, 1200) ??
+    vel_ownship = (900, 950) # (600, 1200) ??
     vel_intruder = (0, 1200) # full range
     #vel_intruder = (0, 300)
 
