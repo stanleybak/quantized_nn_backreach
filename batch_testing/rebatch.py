@@ -1,3 +1,10 @@
+"""
+change an onnx network to accept batch inputs
+
+code from: https://nietras.com/2021/05/24/set-dynamic-batch-size-using-onnx-sharp/
+
+referred from: https://github.com/onnx/onnx/issues/2182"""
+
 import onnx
 import struct
 
