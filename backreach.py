@@ -434,6 +434,10 @@ def backreach_single_unwrapped(arg, parallel=True, plot=False) -> Optional[Backr
         s = work.pop()
         popped += 1
 
+        if popped % 100 == 0 and Settings.max_counterexamples is not None and \
+            shared_num_counterexamples.value > Settings.max_counterexamples:
+            return None
+
         if time.perf_counter() - start > Settings.single_case_timeout:
             rv['timeout'] = True
 

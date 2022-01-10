@@ -8,8 +8,8 @@ from math import pi
 # real? counter-example found with quanta: 10,10,0.1
 
 class Settings:
-    pos_q = 500 #250
-    vel_q = 100 # 50
+    pos_q = 250 #250
+    vel_q = 50 # 50
     theta1_q_deg = 1.5 #1.5 # should divide 1.5 degrees evenly
 
     theta1_q = 2*pi / (360 / theta1_q_deg)
@@ -20,10 +20,10 @@ class Settings:
     # other settings
     single_case_timeout = 120 #15 * 60
     counterexample_start_dist = 20000
-    range_vel_ownship = (100, 1200)
+    range_vel_ownship = (1000, 1200)
     range_vel_intruder = (0, 1200)
 
-    # maximum counterexamples at top-levell before starting refinement
+    # maximum counterexamples before starting refinement
     max_counterexamples = 128
 
     @classmethod

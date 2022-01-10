@@ -581,11 +581,10 @@ class State:
 def plot(s, save_mp4=False):
     """plot a specific simulation"""
     
-    init_plot()
     dx = s.state8[0] - s.state8[4]
     dy = s.state8[1] - s.state8[5]
     dist = math.sqrt(dx*dx + dy*dy)
-    print(f"Plotting state with min_dist: {round(s.min_dist, 2)} and " + \
+    print(f"Plotting sim with min_dist: {round(s.min_dist, 2)} and " + \
           f"final dx: {round(dx, 1)}, dy: {round(dy, 1)}, dist: {round(dist, 2)}")
     
     fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(12, 8))
@@ -674,8 +673,17 @@ def plot(s, save_mp4=False):
     else:
         plt.show()
 
-def plot_paper_image(s, rewind_seconds, title):
+def plot_paper_image(s, rewind_seconds, title, name, square=False):
     """plot the simulation image for the paper (and print table data)"""
+
+    # set plane size
+    intx = s.qinputs[0][1][4]
+    print(f"intx: {intx}")
+
+    State.plane_size = abs(intx) / 20 
+
+    if square:
+        State.plane_size = int(State.plane_size * 1.33)
 
     # print latex table info
     qinput = s.qinputs[rewind_seconds][3]
@@ -683,48 +691,57 @@ def plot_paper_image(s, rewind_seconds, title):
     rho, theta, psi, v_own, v_int = qinput
     theta_deg = theta * 180 / math.pi
     psi_deg = psi * 180 / math.pi
-        
-    print("\n% Auto-generated")
-    print(f"% The unrounded initial state is $\\rho$ = {rho} ft, $\\theta$ = {theta} deg, $\\psi={psi}$ deg, " + \
-          f"$v_{{own}}$ = {v_own} ft/sec, and $v_{{int}}$ = {v_int} ft/sec.")
 
-    print("\\toprule")
-    print("Step & $\\alpha_\\text{prev}$ & Cmd & $\\rho$ (ft) & $\\theta$ (deg) & $\\psi$ (deg) \\\\")
-    print("\\midrule")
+    if not square:
+        print("\n% Auto-generated")
+        print(f"% The unrounded initial state is $\\rho$ = {rho} ft, $\\theta$ = {theta} deg, $\\psi={psi}$ deg, " + \
+              f"$v_{{own}}$ = {v_own} ft/sec, and $v_{{int}}$ = {v_int} ft/sec.")
 
-    cmd_str = ["\\textsc{coc}", "\\textsc{wl}", "\\textsc{wr}", "\\textsc{sl}", "\\textsc{sr}"]
+        print("\\toprule")
+        print("Step & $\\alpha_\\text{prev}$ & Cmd & $\\rho$ (ft) & $\\theta$ (deg) & $\\psi$ (deg) \\\\")
+        print("\\midrule")
 
-    for i, tup in enumerate(s.qinputs[rewind_seconds:]):
-        net, state8, qstate, qinput, cmd = tup
-        rho, theta, psi, v_own, v_int = qinput
+        cmd_str = ["\\textsc{coc}", "\\textsc{wl}", "\\textsc{wr}", "\\textsc{sl}", "\\textsc{sr}"]
+        found_error = False
 
-        theta_deg = theta * 180 / math.pi
-        psi_deg = psi * 180 / math.pi
-        print(f"{i+1} & {cmd_str[net]} & {cmd_str[cmd]} & {rho:.1f} & {theta_deg:.2f} & {psi_deg:.2f} \\\\")
-        dx = state8[0] - state8[4]
-        dy = state8[1] - state8[5]
-        
-        dist = math.sqrt(dx*dx + dy*dy)
-        #print(f"dx: {dx}, dy: {dy}, dist: {dist}")
+        for i, tup in enumerate(s.qinputs[rewind_seconds:]):
+            net, state8, qstate, qinput, cmd = tup
+            rho, theta, psi, v_own, v_int = qinput
 
-        if abs(dist - s.min_dist) < 1e-6:
-            break
+            theta_deg = theta * 180 / math.pi
+            psi_deg = psi * 180 / math.pi
+            prefix = "" if not found_error else "# "
+            
+            print(f"{prefix}{i+1} & {cmd_str[net]} & {cmd_str[cmd]} & {rho:.1f} & {theta_deg:.2f} & {psi_deg:.2f} \\\\")
+            dx = state8[0] - state8[4]
+            dy = state8[1] - state8[5]
 
-    print("\\bottomrule\n")
+            dist = math.sqrt(dx*dx + dy*dy)
+            #print(f"dx: {dx}, dy: {dy}, dist: {dist}")
+
+            if abs(dist - s.min_dist) < 1e-6:
+                found_error = True
+
+        print("\\bottomrule\n")
 
     ######
     
-    init_plot()
     dx = s.state8[0] - s.state8[4]
     dy = s.state8[1] - s.state8[5]
     dist = math.sqrt(dx*dx + dy*dy)
     print(f"Plotting state with min_dist: {round(s.min_dist, 2)} and " + \
           f"final dx: {round(dx, 1)}, dy: {round(dy, 1)}, dist: {round(dist, 2)}")
-    
-    fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(10, 7))
+
+    if square:
+        fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(6, 6))
+    else:
+        fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(10, 7))
+        
     axes.axis('equal')
 
-    axes.set_title(title)
+    if not square:
+        axes.set_title(title)
+        
     axes.set_xlabel('X Position (ft)')
     axes.set_ylabel('Y Position (ft)')
 
@@ -750,8 +767,8 @@ def plot_paper_image(s, rewind_seconds, title):
     xown, yown = init_state8[0], init_state8[1]
     xint, yint = init_state8[4], init_state8[5]
 
-    axes.text(xown, yown + 0.7*State.plane_size, 'Ownship', horizontalalignment='center', fontsize=16,
-                          verticalalignment='bottom')
+    axes.text(xown, yown - 0.5*State.plane_size, 'Ownship', horizontalalignment='center', fontsize=16,
+                          verticalalignment='top')
 
     axes.text(xint + 0.3*State.plane_size, yint + 0.7*State.plane_size, 'Intruder', horizontalalignment='center', fontsize=16,
                       verticalalignment='bottom')
@@ -763,7 +780,11 @@ def plot_paper_image(s, rewind_seconds, title):
     if plot_to_screen:
         plt.show()
     else:
-        filename = 'plot.png'
+        if square:
+            filename = f'{name}_square.png'
+        else:
+            filename = f'{name}.png'
+            
         plt.savefig(filename)
         print(f"saved image to {filename}")
 
@@ -780,7 +801,10 @@ def slow_int_counterexample():
     start = np.array([ -5360.83116819,   7007.87669426,    -65.21523383,    -89.63417501,
            -40570.74242582,    390.10329256])
 
-    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start
+    label = "Unsafe Simulation with Slow Intruder"
+    name = "sintruder"
+
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 40, label, name
 
 def fast_own_counterexample():
     """fast ownship counterexample"""
@@ -796,7 +820,66 @@ def fast_own_counterexample():
     start = np.array([-27057.6501092 , -12592.0447243 ,    603.16465115,    642.90403234,
            -43196.89512824,   1199.91375356])
 
-    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start
+    label = "Unsafe Simulation with Fast Ownship"
+    name = "fownship"
+
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 40, label, name
+
+def first_counterexample():
+    """first counterexample found with full range"""
+
+    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 4, 2, 4, 2, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0]
+    qtheta1 = 73
+    qv_own = 1
+    qv_int = 11
+    
+    # chebeshev center radius: 0.002787609183986557
+    end = np.array([-2.78760918e-03, -2.78760918e-03,  1.40264128e+02,  6.51710649e+00,
+            0.00000000e+00,  1.11319526e+03])
+    start = np.array([-2.90279886e+03, -6.47159328e+03, -4.95421358e+01,  1.31385216e+02,
+           -6.45653252e+04,  1.11319526e+03])
+
+    label = "Unsafe Simulation from Full Range Search"
+    name = "first"
+
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 0, label, name
+
+def causecrash_counterexample():
+    """counterexample with system causing crash"""
+
+    alpha_prev_list = [2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0]
+    qtheta1 = 251
+    qv_own = 1
+    qv_int = 11
+    # chebeshev center radius: 0.3131329350035088
+    end = np.array([ -91.14038384, -113.50961537,    7.05436552, -114.0578106 ,
+              0.        , 1100.31313294])
+    start = np.array([-5.14945097e+03,  2.35145935e+03,  1.09259575e+02,  3.34857199e+01,
+           -6.16175354e+04,  1.10031313e+03])
+
+    label = "ACAS Xu Causes Crash"
+    name = "causecrash"
+
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 12, label, name
+
+def leftturn_counterexample():
+    """counterexample with left turn"""
+
+    alpha_prev_list = [3, 1, 3, 3, 3, 3, 3, 3, 3, 4, 4, 2, 2, 4, 2, 4, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0]
+    qtheta1 = 80
+    qv_own = 1
+    qv_int = 11
+    # chebeshev center radius: 0.7098492629880065
+    end = np.array([-9.21718532e+01, -7.09849263e-01,  3.31710259e+01,  1.21053307e+02,
+            0.00000000e+00,  1.16386763e+03])
+    start = np.array([  -705.16444772,  -6179.58516646,    -64.9755391 ,    107.38901002,
+           -61684.98415307,   1163.86762553])
+
+    label = "leftturn"
+    name = "leftturn"
+    rewind_seconds = 40
+
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name
 
 def main():
     'main entry point'
@@ -805,19 +888,11 @@ def main():
     try_without_quantization = True
     
     ###################
-    #alpha_prev_list, qtheta1, qv_own, qv_int, end, start = fast_own_counterexample() #slow_int_counterexample()
-    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 4, 4, 2, 4, 4, 2, 4, 4, 2, 4, 4, 2, 4, 2, 4, 2, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0]
-    qtheta1 = 78
-    qv_own = 1
-    qv_int = 11
-    # chebeshev center radius: 0.957499964077997
-    end = np.array([-499.04250004,  -84.81124158,  197.18033243,   18.46757159,
-              0.        , 1138.2138022 ])
-    start = np.array([ -3198.28806063,  -8134.69748579,    -92.51945781,    175.10363966,
-           -58048.90391239,   1138.2138022 ])
+    #alpha_prev_list, qtheta1, qv_own, qv_int, end, start, label = fast_own_counterexample() #slow_int_counterexample()
+    alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name = leftturn_counterexample()
     ##################
 
-    skip_checks = try_without_quantization
+    skip_checks = True
         
     if try_without_quantization:
         skip_quantization = True
@@ -832,10 +907,15 @@ def main():
     init_vec = [start[0], start[1], start[2], start[3], start[4], 0, start[5], 0]
 
     # run time backwards N seconds
-    rewind_seconds = 0
 
     if rewind_seconds != 0:
         assert isinstance(rewind_seconds, int)
+
+        dx = init_vec[0] - init_vec[4]
+        dy = init_vec[1] - 0
+        rho_before_rewind = math.sqrt(dx**2 + dy**2)
+        print(f"before rewind rho: {rho_before_rewind}")
+        
         print(f"rewinding by {rewind_seconds} seconds")
         a_mat = get_time_elapse_mat(0, -rewind_seconds)
         init_vec = a_mat @ init_vec
@@ -850,9 +930,9 @@ def main():
     dy = init_vec[1] - 0
     init_rho = math.sqrt(dx**2 + dy**2)
 
+    print(f"init rho: {init_rho}")
     print(f"init own vel: {own_vel}")
     print(f"init int vel: {int_vel}")
-    print(f"init rho: {init_rho}")
 
     if not skip_quantization and not skip_checks:
         # double-check quantization matches expectation
@@ -926,10 +1006,13 @@ def main():
         print("WARNING: rewind_seconds != 0")
         
     # optional: do plot
-    plot(s, save_mp4=False)
+    init_plot()
+    #plot(s, save_mp4=True)
     #title = f"Unsafe Simulation ($v_{{int}}$={round(int_vel, 2)} ft/sec)"
     #title = f"Unsafe Simulation ($v_{{own}}$={round(own_vel, 2)} ft/sec)"
-    #plot_paper_image(s, rewind_seconds, title)
+    plot_paper_image(s, rewind_seconds, label, name)
+    plt.clf()
+    plot_paper_image(s, rewind_seconds, label, name, square=True)
 
 if __name__ == "__main__":
     main()

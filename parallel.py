@@ -103,7 +103,7 @@ def worker_had_counterexample(res):
 def make_params(max_index=None):
     """make params for parallel run"""
 
-    # 1000-1200 is safe with 250, 50, 1.5, 950-100 is not!
+    # 1000-1200 is safe with 250, 50, 1.5, 950-1000 is not!
     # 900-1000 safe with 250, 25, 1.5, but not 850-900!
     # 881.5 has unsafe case!!!!!!
     
@@ -330,6 +330,11 @@ def is_real_counterexample(res):
         rho = sqrt(dx*dx + dy*dy)
 
         if rho < 500:
+            print(f"Non-quantized replay is unsafe (rho={rho})! Real counterexample.")
+            print()
+            s.print_replay_init()
+            print()
+        
             unsafe_continuous = True
             break
 
@@ -372,12 +377,6 @@ def is_real_counterexample(res):
 
     #if mismatch_quantized:
     #    print("Warning: Quantized replay DOES NOT match")
-
-    if unsafe_continuous:
-        print("Continuous replay is unsafe! Real counterexample.")
-        print()
-        s.print_replay_init()
-        print()
 
     return unsafe_continuous
 
