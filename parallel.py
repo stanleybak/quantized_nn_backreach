@@ -13,7 +13,7 @@ from copy import deepcopy
 
 import matplotlib.pyplot as plt
 
-from settings import Quanta
+from settings import Settings
 from util import to_time_str, get_num_cores, is_init_qx_qy
 from timerutil import Timers
 from star import Star
@@ -105,16 +105,16 @@ def make_params(max_index=None):
     # 900-1000 safe with 250, 25, 1.5, but not 850-900!
     # 881.5 has unsafe case!!!!!!
     
-    vel_ownship = (850, 900) # (600, 1200) ??
-    vel_intruder = (0, 1200) # full range
+    vel_ownship = Settings.range_vel_ownship
+    vel_intruder = Settings.range_vel_intruder #(0, 1200) # full range
     #vel_intruder = (0, 300)
 
     print(f"Making params with vel_ownship={vel_ownship}, vel_intruder={vel_intruder}, " + \
           f"and max_index={max_index}...")
 
-    pos_quantum = Quanta.pos
-    vel_quantum = Quanta.vel
-    theta1_quantum = Quanta.theta1
+    pos_quantum = Settings.pos_q
+    vel_quantum = Settings.vel_q
+    theta1_quantum = Settings.theta1_q
 
     assert -500 % pos_quantum < 1e-6
     assert 500 % pos_quantum < 1e-6
@@ -301,7 +301,7 @@ def is_real_counterexample(res):
     q_theta1 = s.qtheta1
     s_copy = deepcopy(s)
 
-    pos_quantum = Quanta.pos
+    pos_quantum = Settings.pos_q
     mismatch_quantized = False
     mismatch_continuous = False
 
@@ -326,10 +326,10 @@ def is_real_counterexample(res):
         q_cmd_out = get_cmd(net, *qstate)
 
         c_theta1 = atan2(pt[Star.VY_OWN], pt[Star.VX_OWN])
-        #quantized = q_theta1 * Quanta.theta1 + Quanta.theta1 / 2
+        #quantized = q_theta1 * Settings.theta1_q + Settings.theta1_q / 2
         
-        #vown = s.qv_own * Quanta.vel + Quanta.vel / 2
-        #vint = s.qv_int * Quanta.vel + Quanta.vel / 2
+        #vown = s.qv_own * Settings.vel_q + Settings.vel_q / 2
+        #vint = s.qv_int * Settings.vel_q + Settings.vel_q / 2
         vown = sqrt(pt[Star.VX_OWN]**2 + pt[Star.VY_OWN]**2)
         vint = sqrt(pt[Star.VX_INT]**2 + 0**2)
         cstate = (dx, dy, c_theta1, vown, vint)
@@ -353,7 +353,7 @@ def is_real_counterexample(res):
         mat = get_time_elapse_mat(expected_cmd, 1.0)
         pt = mat @ pt
 
-        delta_q_theta = Quanta.cmd_quantum_list[expected_cmd]# * theta1_quantum
+        delta_q_theta = Settings.cmd_quantum_list[expected_cmd]# * theta1_quantum
         q_theta1 += delta_q_theta
 
     if mismatch_quantized:
@@ -375,7 +375,7 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
 
     print(f"\n####### level {level}: Refining {len(counterexamples)} counterexamples ######")
 
-    # need to do this check before refining quanta
+    # need to do this check before refining Settings
     print("Replaying counterexamples...")
     for i, counterexample in enumerate(counterexamples):
         #print(f"Replaying counterexample {i+1}/{len(counterexamples)}")
@@ -400,21 +400,21 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
         return False
     
     if levels[level] == 'pos':
-        print(f"Level {level}: refining q_pos from {Quanta.pos} to {Quanta.pos / 2}")
-        Quanta.pos /= 2
+        print(f"Level {level}: refining q_pos from {Settings.pos_q} to {Settings.pos_q / 2}")
+        Settings.pos_q /= 2
     elif levels[level] == 'vel':
-        print(f"Level {level}: refining q_vel from {Quanta.vel} to {Quanta.vel / 2}")
-        Quanta.vel /= 2
+        print(f"Level {level}: refining q_vel from {Settings.vel_q} to {Settings.vel_q / 2}")
+        Settings.vel_q /= 2
     elif levels[level] == 'theta1':
-        print(f"Level {level}: refining q_theta1 from {Quanta.theta1_deg} to {Quanta.theta1_deg / 2}")
-        Quanta.theta1_deg /= 2
-        Quanta.theta1 /= 2
-        Quanta.init_cmd_quantum_list() # since theta1 was changed
+        print(f"Level {level}: refining q_theta1 from {Settings.theta1_q_deg} to {Settings.theta1_q_deg / 2}")
+        Settings.theta1_q_deg /= 2
+        Settings.theta1_q /= 2
+        Settings.init_cmd_quantum_list() # since theta1 was changed
 
-    Quanta.single_case_timeout *= 2
+    Settings.single_case_timeout *= 2
 
-    print(f"Level {level} with quanta: pos={Quanta.pos}, vel={Quanta.vel}, theta1={Quanta.theta1_deg}, " + \
-          f"timeout={Quanta.single_case_timeout}")
+    print(f"Level {level} with Settings: pos={Settings.pos_q}, vel={Settings.vel_q}, theta1={Settings.theta1_q_deg}, " + \
+          f"timeout={Settings.single_case_timeout}")
 
     for counterexample in counterexamples:
         alpha_prev, x_own, y_own, qtheta1, q_vown, q_vint = counterexample['params']

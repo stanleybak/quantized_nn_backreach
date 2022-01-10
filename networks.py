@@ -15,7 +15,7 @@ import onnxruntime as ort
 
 from timerutil import timed
 
-from settings import Quanta
+from settings import Settings
 
 # TODO: check effect on runtime if LRU cache is used here
 @lru_cache(maxsize=int(1e6))
@@ -29,9 +29,9 @@ def get_cmd(alpha_prev, qdx, qdy, qtheta1, qv_own, qv_int, stdout=False) -> int:
     assert isinstance(alpha_prev, int) and 0 <= alpha_prev <= 4, f"alpha_prev was {alpha_prev}"
     assert isinstance(qdx, int)
 
-    pos_quantum = Quanta.pos
-    vel_quantum = Quanta.vel
-    theta1_quantum = Quanta.theta1
+    pos_quantum = Settings.pos_q
+    vel_quantum = Settings.vel_q
+    theta1_quantum = Settings.theta1_q
 
     # convert quantized state to floats
     dx = pos_quantum / 2 + pos_quantum * qdx

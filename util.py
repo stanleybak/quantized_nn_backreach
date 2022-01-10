@@ -8,7 +8,7 @@ import os
 import numpy as np
 
 from star import Star
-from settings import Quanta
+from settings import Settings
 
 from timerutil import timed, Timers
 
@@ -19,7 +19,7 @@ def is_init_qx_qy(qx, qy):
     """
 
     rv = False
-    pos_quantum = Quanta.pos
+    pos_quantum = Settings.pos_q
 
     xs = (qx * pos_quantum, (qx+1) * pos_quantum)
     ys = (qy * pos_quantum, (qy+1) * pos_quantum)
@@ -78,7 +78,7 @@ def quantize(x, delta=50):
 def make_qstar(orig_star, qstate):
     """return a subset of the star within the given quantization box"""
 
-    pos_quantum = Quanta.pos
+    pos_quantum = Settings.pos_q
 
     qdx, qdy = qstate[:2]
     max_x = (qdx + 1) * pos_quantum
@@ -118,7 +118,7 @@ def make_qstar(orig_star, qstate):
 def make_large_qstar(orig_star, qx_min, qx_max, qy_min, qy_max):
     """return a subset of the star within the given quantization box"""
 
-    pos_quantum = Quanta.pos
+    pos_quantum = Settings.pos_q
 
     max_x = (qx_max) * pos_quantum
     min_x = (qx_min) * pos_quantum

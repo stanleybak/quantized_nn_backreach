@@ -22,7 +22,7 @@ from matplotlib.lines import Line2D
 
 import onnxruntime as ort
 
-from settings import Quanta
+from settings import Settings
 
 skip_quantization = False
 
@@ -134,9 +134,9 @@ def state8_to_qinput_qstate(state8, stdout=False):
 
     x1, y1, vxo, vyo, x2, y2, vxi, vyi = state8
 
-    pos_quantum = Quanta.pos
-    vel_quantum = Quanta.vel
-    theta1_quantum = Quanta.theta1
+    pos_quantum = Settings.pos_q
+    vel_quantum = Settings.vel_q
+    theta1_quantum = Settings.theta1_q
 
     dy = quantize(y2 - y1, pos_quantum)
     dx = quantize(x2 - x1, pos_quantum)
@@ -815,7 +815,7 @@ def main():
         skip_checks = True
         #alpha_prev_list = []
 
-    theta1_quantum = Quanta.theta1
+    theta1_quantum = Settings.theta1_q
         
     q_theta1 = qtheta1 * theta1_quantum + theta1_quantum / 2 
     cmd_list = [0] * (len(alpha_prev_list) - 1)

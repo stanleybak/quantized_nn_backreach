@@ -11,7 +11,7 @@ import numpy as np
 from scipy.linalg import expm
 
 from star import Star
-from settings import Quanta
+from settings import Settings
 
 def init_to_constraints(qx: int, qy: int,
                         qv_own_min: int, qv_int_min: int, qtheta1_min: int):
@@ -24,9 +24,9 @@ def init_to_constraints(qx: int, qy: int,
     a_mat: List[List[float]] = []
     b_vec: List[float] = []
 
-    pos_quantum = Quanta.pos
-    vel_quantum = Quanta.vel
-    theta1_quantum = Quanta.theta1
+    pos_quantum = Settings.pos_q
+    vel_quantum = Settings.vel_q
+    theta1_quantum = Settings.theta1_q
 
     # convert to float ranges for box
     x = qx * pos_quantum, (qx + 1) * pos_quantum

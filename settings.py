@@ -7,12 +7,12 @@ from math import pi
 
 # real? counter-example found with quanta: 10,10,0.1
 
-class Quanta:
-    pos = 250 #250
-    vel = 25 # 50
-    theta1_deg = 1.5 #1.5 # should divide 1.5 degrees evenly
+class Settings:
+    pos_q = 500 #250
+    vel_q = 100 # 50
+    theta1_q_deg = 1.5 #1.5 # should divide 1.5 degrees evenly
 
-    theta1 = 2*pi / (360 / theta1_deg)
+    theta1_q = 2*pi / (360 / theta1_q_deg)
 
     # how many theta1 quanta change for each command
     cmd_quantum_list: List[int] = [] # [0, 1, -1, 2, -2]
@@ -20,6 +20,9 @@ class Quanta:
     # other settings
     single_case_timeout = 120 #15 * 60
     counterexample_start_dist = 20000
+
+    vel_ownship = (100, 1200) # 
+    vel_intruder = (0, 1200) # full range
 
     @classmethod
     def init_cmd_quantum_list(cls):

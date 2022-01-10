@@ -19,7 +19,7 @@ from util import make_qstar, make_large_qstar, is_init_qx_qy, get_num_cores
 from networks import get_cmd
 
 from timerutil import timed
-from settings import Quanta
+from settings import Settings
 from parallel import run_all_parallel, increment_index, shared_num_counterexamples, \
                      worker_had_counterexample, refine_indices, run_single_case, shared_num_timeouts
 
@@ -106,7 +106,7 @@ class State():
             p.plot_star(s.star, color='r')
             mismatch = False
 
-            pos_quantum = Quanta.pos
+            pos_quantum = Settings.pos_q
 
             for i in range(len(s.alpha_prev_list) - 1):
                 net = s.alpha_prev_list[-(i+1)]
@@ -133,7 +133,7 @@ class State():
                 mat = get_time_elapse_mat(cmd_out, 1.0)
                 pt = mat @ pt
 
-                delta_q_theta = Quanta.cmd_quantum_list[cmd_out]# * theta1_quantum
+                delta_q_theta = Settings.cmd_quantum_list[cmd_out]# * theta1_quantum
                 q_theta1 += delta_q_theta
 
             if plot:
@@ -171,7 +171,7 @@ class State():
         self.star.b_vec = mat @ self.star.b_vec
 
         # clear, weak left, weak right, strong left, strong right
-        delta_q_theta = Quanta.cmd_quantum_list[cmd]
+        delta_q_theta = Settings.cmd_quantum_list[cmd]
 
         if forward:
             self.qtheta1 += delta_q_theta
@@ -343,7 +343,7 @@ class State():
     def get_dx_dy_qrange(self, stdout=False) -> Tuple[Tuple[int, int], Tuple[int, int]]:
         """get the quantized range for (dx, dy)"""
 
-        pos_quantum = Quanta.pos
+        pos_quantum = Settings.pos_q
         vec = np.zeros(Star.NUM_VARS)
 
         # dx = x_int - x_own
@@ -431,7 +431,7 @@ def backreach_single_unwrapped(arg, parallel=True, plot=False) -> Optional[Backr
         s = work.pop()
         popped += 1
 
-        if time.perf_counter() - start > Quanta.single_case_timeout:
+        if time.perf_counter() - start > Settings.single_case_timeout:
             rv['timeout'] = True
 
             if parallel:
@@ -464,7 +464,7 @@ def backreach_single_unwrapped(arg, parallel=True, plot=False) -> Optional[Backr
                 dx = (pt[Star.X_INT] - pt[Star.X_OWN])
                 dy = (0 - pt[Star.Y_OWN])
                 
-                if dx**2 + dy**2 > Quanta.counterexample_start_dist**2:
+                if dx**2 + dy**2 > Settings.counterexample_start_dist**2:
                     rv['counterexample'] = deepcopy(p)
 
                     if parallel:
@@ -491,13 +491,13 @@ def backreach_single_unwrapped(arg, parallel=True, plot=False) -> Optional[Backr
 def main():
     """main entry point"""
 
-    Quanta.init_cmd_quantum_list()
+    Settings.init_cmd_quantum_list()
 
     # emacs hard-warp command: M+x fill-paragraph
     
     if get_num_cores() < 50:
         # 477 is worst WHY?, 166 is 50 secs
-        Quanta.single_case_timeout = 300
+        Settings.single_case_timeout = 300
         # 
         #run_single_case(backreach_single, index=947, plot=False)
         run_all_parallel(backreach_single, indices=[705, 706])
