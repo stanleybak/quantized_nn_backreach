@@ -805,10 +805,19 @@ def main():
     try_without_quantization = True
     
     ###################
-    alpha_prev_list, qtheta1, qv_own, qv_int, end, start = fast_own_counterexample() #slow_int_counterexample()
+    #alpha_prev_list, qtheta1, qv_own, qv_int, end, start = fast_own_counterexample() #slow_int_counterexample()
+    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 4, 4, 2, 4, 4, 2, 4, 4, 2, 4, 4, 2, 4, 2, 4, 2, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0]
+    qtheta1 = 78
+    qv_own = 1
+    qv_int = 11
+    # chebeshev center radius: 0.957499964077997
+    end = np.array([-499.04250004,  -84.81124158,  197.18033243,   18.46757159,
+              0.        , 1138.2138022 ])
+    start = np.array([ -3198.28806063,  -8134.69748579,    -92.51945781,    175.10363966,
+           -58048.90391239,   1138.2138022 ])
     ##################
 
-    skip_checks = True
+    skip_checks = try_without_quantization
         
     if try_without_quantization:
         skip_quantization = True
@@ -823,7 +832,7 @@ def main():
     init_vec = [start[0], start[1], start[2], start[3], start[4], 0, start[5], 0]
 
     # run time backwards N seconds
-    rewind_seconds = 40
+    rewind_seconds = 0
 
     if rewind_seconds != 0:
         assert isinstance(rewind_seconds, int)
@@ -917,10 +926,10 @@ def main():
         print("WARNING: rewind_seconds != 0")
         
     # optional: do plot
-    #plot(s, save_mp4=True)
+    plot(s, save_mp4=False)
     #title = f"Unsafe Simulation ($v_{{int}}$={round(int_vel, 2)} ft/sec)"
-    title = f"Unsafe Simulation ($v_{{own}}$={round(own_vel, 2)} ft/sec)"
-    plot_paper_image(s, rewind_seconds, title)
+    #title = f"Unsafe Simulation ($v_{{own}}$={round(own_vel, 2)} ft/sec)"
+    #plot_paper_image(s, rewind_seconds, title)
 
 if __name__ == "__main__":
     main()

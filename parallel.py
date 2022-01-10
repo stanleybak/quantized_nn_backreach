@@ -4,7 +4,7 @@ code related to paralell backreachability
 Stanley Bak, Jan 2021
 """
 
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import time
 import multiprocessing
 import pickle
@@ -23,6 +23,7 @@ from dubins import get_time_elapse_mat
 global_start_time = 0.0
 global_params_list: List[Tuple[int, int, int, int, int, int]] = [] # assigned after we get params made
 global_process_id = -1 # assigned in init
+global_max_counterexamples: Optional[int] = None
 
 shared_next_index = multiprocessing.Value('i', 0) # the next index to be done
 shared_next_print_time = multiprocessing.Value('f', 0)
@@ -70,7 +71,7 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
                 runtime, index = longest
 
                 if len(shared_counterexamples_list) > 0:
-                    print(f"\nTimeouts: {shared_num_counterexamples.value}, Counterexamples " + \
+                    print(f"\nTimeouts: {shared_num_timeouts.value}, Counterexamples " + \
                           f"({len(shared_counterexamples_list)}): {shared_counterexamples_list}",
                           end='')
 
@@ -89,7 +90,9 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
         print(".", end='', flush=True)
 
     params = global_params_list[next_index]
-    #print(next_index, params)
+
+    if global_max_counterexamples is not None and shared_num_counterexamples.value > global_max_counterexamples:
+        next_index = -1
 
     return next_index, params
 
@@ -164,10 +167,13 @@ def make_params(max_index=None):
 
     return params_list
 
-def init_process(q):
+def init_process(q, max_counterexamples):
     """init the process"""
 
     global global_process_id
+    global global_max_counterexamples
+
+    global_max_counterexamples = max_counterexamples
     global_process_id = q.get()
 
     Timers.enabled = False
@@ -191,7 +197,7 @@ def print_result(label, res):
         rad = res['counterexample'].star.get_witness(get_radius=True)[-1]
         print(f"chebeshev radius of witness: {rad}")
 
-def get_counterexamples(backreach_single, indices=None, params=None):
+def get_counterexamples(backreach_single, indices=None, params=None, max_counterexamples=None):
     """get all counterexamples at the current quantization"""
 
     global global_start_time
@@ -234,14 +240,16 @@ def get_counterexamples(backreach_single, indices=None, params=None):
     counterexamples = []
     total_runtime = 0.0
 
-    with multiprocessing.Pool(get_num_cores(), initializer=init_process, initargs=(q, )) as pool:
+    res_was_none = False
+
+    with multiprocessing.Pool(get_num_cores(), initializer=init_process, initargs=(q, max_counterexamples)) as pool:
         res_list = pool.map(backreach_single, range(num_cases), chunksize=1)
         max_runtime = res_list[0]
         timeouts = 0
 
         for res in res_list:
             if res is None:
-                print("Warning: res was None (exception?)")
+                res_was_none = True
                 continue
             
             if res['counterexample'] is not None:
@@ -267,6 +275,10 @@ def get_counterexamples(backreach_single, indices=None, params=None):
         print(f"counterexamples ({len(shared_counterexamples_list)}): {shared_counterexamples_list}")
     
     print(f"Avg runtime per case: {to_time_str(total_runtime / num_cases)}")
+
+    if res_was_none:
+        print("Warning: Incomplete analysis: res was None for some cases (number of counterexamples " + \
+              f"exceeded Settings.max_counterexamples={Settings.max_counterexamples})")
 
     return counterexamples, max_runtime
 
@@ -301,29 +313,29 @@ def is_real_counterexample(res):
     q_theta1 = s.qtheta1
     s_copy = deepcopy(s)
 
-    pos_quantum = Settings.pos_q
-    mismatch_quantized = False
-    mismatch_continuous = False
+    #pos_quantum = Settings.pos_q
+    #mismatch_quantized = False
+    #mismatch_continuous = False
+    unsafe_continuous = False
 
     for i in range(len(s.alpha_prev_list) - 1):
         net = s.alpha_prev_list[-(i+1)]
-        expected_cmd = s.alpha_prev_list[-(i+2)]
+        #expected_cmd = s.alpha_prev_list[-(i+2)]
 
         dx = pt[Star.X_INT] - pt[Star.X_OWN]
         dy = 0 - pt[Star.Y_OWN]
         
-        qdx = floor(dx / pos_quantum)
-        qdy = floor(dy / pos_quantum)
+        #qdx = floor(dx / pos_quantum)
+        #qdy = floor(dy / pos_quantum)
 
         rho = sqrt(dx*dx + dy*dy)
 
         if rho < 500:
-            print(f"forcing mismatch_continuous=False and breaking because rho ({rho}) < 500")
-            mismatch_continuous = False
+            unsafe_continuous = True
             break
 
-        qstate = (qdx, qdy, q_theta1, s.qv_own, s.qv_int)
-        q_cmd_out = get_cmd(net, *qstate)
+        #qstate = (qdx, qdy, q_theta1, s.qv_own, s.qv_int)
+        #q_cmd_out = get_cmd(net, *qstate)
 
         c_theta1 = atan2(pt[Star.VY_OWN], pt[Star.VX_OWN])
         #quantized = q_theta1 * Settings.theta1_q + Settings.theta1_q / 2
@@ -335,37 +347,40 @@ def is_real_counterexample(res):
         cstate = (dx, dy, c_theta1, vown, vint)
 
         c_cmd_out = get_cmd_continuous(net, *cstate)
-        
-        if q_cmd_out != expected_cmd and not mismatch_quantized:
-            #print(f"Quantized mismatch at step {i+1}. got cmd {q_cmd_out}, expected cmd {expected_cmd}")
-            mismatch_quantized = True
 
-        if c_cmd_out != expected_cmd and not mismatch_continuous:
+        #print(f"{i}. net: {net}, cstate: {cstate}, c_cmd: {c_cmd_out}")
+        
+        #if q_cmd_out != expected_cmd and not mismatch_quantized:
+        #    #print(f"Quantized mismatch at step {i+1}. got cmd {q_cmd_out}, expected cmd {expected_cmd}")
+         #   mismatch_quantized = True
+
+        #if c_cmd_out != expected_cmd and not mismatch_continuous:
             #print(f"Non-quantized mismatch at step {i+1}/{len(s.alpha_prev_list) - 1}. " + \
             #      f"got cmd {c_cmd_out}, expected cmd {expected_cmd}")
-            mismatch_continuous = True
+        #    mismatch_continuous = True
 
-        if mismatch_quantized and mismatch_continuous:
-            break
+        #if mismatch_quantized and mismatch_continuous:
+        #    break
 
-        s_copy.backstep(forward=True, forward_alpha_prev=expected_cmd)
+        #s_copy.backstep(forward=True, forward_alpha_prev=expected_cmd)
+        s_copy.backstep(forward=True, forward_alpha_prev=c_cmd_out)
 
-        mat = get_time_elapse_mat(expected_cmd, 1.0)
-        pt = mat @ pt
+        #mat = get_time_elapse_mat(expected_cmd, 1.0)
+        #pt = mat @ pt
 
-        delta_q_theta = Settings.cmd_quantum_list[expected_cmd]# * theta1_quantum
-        q_theta1 += delta_q_theta
+        #delta_q_theta = Settings.cmd_quantum_list[expected_cmd]# * theta1_quantum
+        #q_theta1 += delta_q_theta
 
-    if mismatch_quantized:
-        print("Warning: Quantized replay DOES NOT match")
+    #if mismatch_quantized:
+    #    print("Warning: Quantized replay DOES NOT match")
 
-    if not mismatch_continuous:
-        print("Continuous replay matched! Real counterexample.")
+    if unsafe_continuous:
+        print("Continuous replay is unsafe! Real counterexample.")
         print()
         s.print_replay_init()
         print()
 
-    return not mismatch_continuous
+    return unsafe_continuous
 
 def refine_counterexamples(backreach_single, counterexamples, level=0):
     """refine counterexamples
@@ -392,7 +407,7 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
 
     qstates = [] # qstates after refinement
 
-    levels = ['vel', 'pos', 'vel', 'pos', 'vel', 'theta1', 'pos', 'vel', 'theta1',
+    levels = ['pos', 'vel', 'pos', 'vel', 'pos', 'vel', 'theta1', 'pos', 'vel', 'theta1',
               'pos', 'vel', 'theta1', 'pos', 'vel', 'pos', 'vel', 'pos', 'vel']
 
     if level >= len(levels):
@@ -470,7 +485,8 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
 def run_all_parallel(backreach_single, indices=None):
     """loop over all cases"""
     
-    counterexamples, max_runtime = get_counterexamples(backreach_single, indices=indices)
+    counterexamples, max_runtime = get_counterexamples(backreach_single, indices=indices,
+                                                       max_counterexamples=Settings.max_counterexamples)
 
     print()
     print_result('longest runtime', max_runtime)
@@ -517,7 +533,8 @@ def refine_indices(backreach_single, counterexample_index_list):
 
     params = [params[index] for index in counterexample_index_list]
 
-    new_counterexamples, _ = get_counterexamples(backreach_single, params=params)
+    new_counterexamples, _ = get_counterexamples(backreach_single, params=params,
+                                                 max_counterexamples=Settings.max_counterexamples)
     rv = True
     
     if new_counterexamples:

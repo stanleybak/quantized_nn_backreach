@@ -401,6 +401,9 @@ def backreach_single_unwrapped(arg, parallel=True, plot=False) -> Optional[Backr
         index = 0
         params = arg
 
+    if index < 0: # exceeded max counterexamples
+        return None
+
     init_alpha_prev, x_own, y_own, theta1, v_own, v_int = params
 
     start = time.perf_counter()
@@ -436,7 +439,7 @@ def backreach_single_unwrapped(arg, parallel=True, plot=False) -> Optional[Backr
 
             if parallel:
                 with shared_num_timeouts.get_lock():
-                    shared_num_counterexamples.value += 1
+                    shared_num_timeouts.value += 1
             
             break
 
