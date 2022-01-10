@@ -104,7 +104,18 @@ def make_params(max_index=None):
     """make params for parallel run"""
 
     # 1000-1200 is safe with 250, 50, 1.5, 950-1000 is not!
+    # finished enumeration (1843200 cases) in 13.68 min, counterexamples: 0
+    #num timeouts: 0
+    #Avg runtime per case: 0.055 sec
+    #longest runtime (15.23) (index: 949)
+
+    
     # 900-1000 safe with 250, 25, 1.5, but not 850-900!
+    #finished enumeration (3686400 cases) in 23.93 min, counterexamples: 0
+    #num timeouts: 0
+    #Avg runtime per case: 0.048 sec
+    #longest runtime (58.26) (index: 693)
+    
     # 881.5 has unsafe case!!!!!!
     
     vel_ownship = Settings.range_vel_ownship

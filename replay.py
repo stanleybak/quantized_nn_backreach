@@ -673,7 +673,7 @@ def plot(s, save_mp4=False):
     else:
         plt.show()
 
-def plot_paper_image(s, rewind_seconds, title, name, square=False):
+def plot_paper_image(s, rewind_seconds, title, name, square=False, show_legend=True, ownship_below=True):
     """plot the simulation image for the paper (and print table data)"""
 
     # set plane size
@@ -733,7 +733,7 @@ def plot_paper_image(s, rewind_seconds, title, name, square=False):
           f"final dx: {round(dx, 1)}, dy: {round(dy, 1)}, dist: {round(dist, 2)}")
 
     if square:
-        fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(6, 6))
+        fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(7, 5))
     else:
         fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(10, 7))
         
@@ -745,14 +745,16 @@ def plot_paper_image(s, rewind_seconds, title, name, square=False):
     axes.set_xlabel('X Position (ft)')
     axes.set_ylabel('Y Position (ft)')
 
-    custom_lines = [Line2D([0], [0], color='g', lw=2),
-                    Line2D([0], [0], color='b', lw=2),
-                    Line2D([0], [0], color='k', lw=2),
-                    Line2D([0], [0], color='c', lw=2),
-                    Line2D([0], [0], color='r', lw=2)]
+    if show_legend:
+        custom_lines = [Line2D([0], [0], color='g', lw=2),
+                        Line2D([0], [0], color='b', lw=2),
+                        Line2D([0], [0], color='k', lw=2),
+                        Line2D([0], [0], color='c', lw=2),
+                        Line2D([0], [0], color='r', lw=2)]
 
-    axes.legend(custom_lines, ['Strong Left', 'Weak Left', 'Clear of Conflict', 'Weak Right', 'Strong Right'], \
-                fontsize=14, loc='lower left')
+
+        axes.legend(custom_lines, ['Strong Left', 'Weak Left', 'Clear of Conflict', 'Weak Right', 'Strong Right'], \
+                    fontsize=14, loc='lower left')
     
     s.make_artists(axes, show_intruder=True, animated=False)
     s.set_plane_visible(True)
@@ -767,8 +769,15 @@ def plot_paper_image(s, rewind_seconds, title, name, square=False):
     xown, yown = init_state8[0], init_state8[1]
     xint, yint = init_state8[4], init_state8[5]
 
-    axes.text(xown, yown - 0.5*State.plane_size, 'Ownship', horizontalalignment='center', fontsize=16,
-                          verticalalignment='top')
+    if square:
+        axes.set_xticks(axes.get_xticks()[::2])
+
+    if ownship_below:
+        axes.text(xown, yown - 0.5*State.plane_size, 'Ownship', horizontalalignment='center', fontsize=16,
+                  verticalalignment='top')
+    else:
+        axes.text(xown, yown + 0.5*State.plane_size, 'Ownship', horizontalalignment='center', fontsize=16,
+                  verticalalignment='bottom')
 
     axes.text(xint + 0.3*State.plane_size, yint + 0.7*State.plane_size, 'Intruder', horizontalalignment='center', fontsize=16,
                       verticalalignment='bottom')
@@ -781,7 +790,7 @@ def plot_paper_image(s, rewind_seconds, title, name, square=False):
         plt.show()
     else:
         if square:
-            filename = f'{name}_square.png'
+            filename = f'square_{name}.png'
         else:
             filename = f'{name}.png'
             
@@ -803,8 +812,9 @@ def slow_int_counterexample():
 
     label = "Unsafe Simulation with Slow Intruder"
     name = "sintruder"
+    ownship_below = False
 
-    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 40, label, name
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 40, label, name, ownship_below
 
 def fast_own_counterexample():
     """fast ownship counterexample"""
@@ -822,8 +832,9 @@ def fast_own_counterexample():
 
     label = "Unsafe Simulation with Fast Ownship"
     name = "fownship"
+    ownship_below = True
 
-    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 40, label, name
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 40, label, name, ownship_below
 
 def first_counterexample():
     """first counterexample found with full range"""
@@ -841,8 +852,9 @@ def first_counterexample():
 
     label = "Unsafe Simulation from Full Range Search"
     name = "first"
+    ownship_below = True
 
-    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 0, label, name
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 0, label, name, ownship_below
 
 def causecrash_counterexample():
     """counterexample with system causing crash"""
@@ -859,8 +871,9 @@ def causecrash_counterexample():
 
     label = "ACAS Xu Causes Crash"
     name = "causecrash"
+    ownship_below = False
 
-    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 12, label, name
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 12, label, name, ownship_below
 
 def leftturn_counterexample():
     """counterexample with left turn"""
@@ -878,141 +891,152 @@ def leftturn_counterexample():
     label = "leftturn"
     name = "leftturn"
     rewind_seconds = 40
+    ownship_below = True
 
-    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below
 
 def main():
     'main entry point'
 
     global skip_quantization
     try_without_quantization = True
-    
-    ###################
-    #alpha_prev_list, qtheta1, qv_own, qv_int, end, start, label = fast_own_counterexample() #slow_int_counterexample()
-    alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name = leftturn_counterexample()
-    ##################
 
-    skip_checks = True
-        
-    if try_without_quantization:
-        skip_quantization = True
+    init_plot()
+    #case_funcs = [first_counterexample, causecrash_counterexample, fast_own_counterexample, slow_int_counterexample]
+    case_funcs = [causecrash_counterexample]
+
+    for i, case_func in enumerate(case_funcs):
+        alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below = case_func()
+
+        ###################
+        #alpha_prev_list, qtheta1, qv_own, qv_int, end, start, label = fast_own_counterexample() #slow_int_counterexample()
+        #alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name = leftturn_counterexample()
+        ##################
+
         skip_checks = True
-        #alpha_prev_list = []
 
-    theta1_quantum = Settings.theta1_q
-        
-    q_theta1 = qtheta1 * theta1_quantum + theta1_quantum / 2 
-    cmd_list = [0] * (len(alpha_prev_list) - 1)
+        if try_without_quantization:
+            skip_quantization = True
+            skip_checks = True
+            #alpha_prev_list = []
 
-    init_vec = [start[0], start[1], start[2], start[3], start[4], 0, start[5], 0]
+        theta1_quantum = Settings.theta1_q
 
-    # run time backwards N seconds
+        q_theta1 = qtheta1 * theta1_quantum + theta1_quantum / 2 
+        cmd_list = [0] * (len(alpha_prev_list) - 1)
 
-    if rewind_seconds != 0:
-        assert isinstance(rewind_seconds, int)
+        init_vec = [start[0], start[1], start[2], start[3], start[4], 0, start[5], 0]
 
+        # run time backwards N seconds
+
+        if rewind_seconds != 0:
+            assert isinstance(rewind_seconds, int)
+
+            dx = init_vec[0] - init_vec[4]
+            dy = init_vec[1] - 0
+            rho_before_rewind = math.sqrt(dx**2 + dy**2)
+            print(f"before rewind rho: {rho_before_rewind}")
+
+            print(f"rewinding by {rewind_seconds} seconds")
+            a_mat = get_time_elapse_mat(0, -rewind_seconds)
+            init_vec = a_mat @ init_vec
+
+            cmd_list = [cmd_list[0]] * rewind_seconds + cmd_list
+        ########
+
+        _, _, vx, vy, _, vxi = start
+        own_vel = math.sqrt(vx**2 + vy**2)
+        int_vel = math.sqrt(vxi**2)
         dx = init_vec[0] - init_vec[4]
         dy = init_vec[1] - 0
-        rho_before_rewind = math.sqrt(dx**2 + dy**2)
-        print(f"before rewind rho: {rho_before_rewind}")
-        
-        print(f"rewinding by {rewind_seconds} seconds")
-        a_mat = get_time_elapse_mat(0, -rewind_seconds)
-        init_vec = a_mat @ init_vec
+        init_rho = math.sqrt(dx**2 + dy**2)
 
-        cmd_list = [cmd_list[0]] * rewind_seconds + cmd_list
-    ########
+        print(f"init rho: {init_rho}")
+        print(f"init own vel: {own_vel}")
+        print(f"init int vel: {int_vel}")
 
-    _, _, vx, vy, _, vxi = start
-    own_vel = math.sqrt(vx**2 + vy**2)
-    int_vel = math.sqrt(vxi**2)
-    dx = init_vec[0] - init_vec[4]
-    dy = init_vec[1] - 0
-    init_rho = math.sqrt(dx**2 + dy**2)
+        if not skip_quantization and not skip_checks:
+            # double-check quantization matches expectation
 
-    print(f"init rho: {init_rho}")
-    print(f"init own vel: {own_vel}")
-    print(f"init int vel: {int_vel}")
+            print(f"own_vel computed: {own_vel}, quantized: {qv_own}")
+            print(f"int_vel computed: {int_vel}, quantized: {qv_int}")
 
-    if not skip_quantization and not skip_checks:
-        # double-check quantization matches expectation
-        
-        print(f"own_vel computed: {own_vel}, quantized: {qv_own}")
-        print(f"int_vel computed: {int_vel}, quantized: {qv_int}")
+            print(f"ownship vx / vy = {vx}, {vy}")
 
-        print(f"ownship vx / vy = {vx}, {vy}")
+            theta1 = math.atan2(vy, vx)
+            print(f"real theta1: {theta1}")
+            theta1_deg = theta1 * 360/(2*math.pi)
+            q_theta1_deg = q_theta1 * 360/(2*math.pi)
+            print(f"q_theta1 computed: {round(theta1_deg, 3)} deg, quantized: {round(q_theta1_deg, 3)} deg")
 
-        theta1 = math.atan2(vy, vx)
-        print(f"real theta1: {theta1}")
-        theta1_deg = theta1 * 360/(2*math.pi)
-        q_theta1_deg = q_theta1 * 360/(2*math.pi)
-        print(f"q_theta1 computed: {round(theta1_deg, 3)} deg, quantized: {round(q_theta1_deg, 3)} deg")
+            actual_qtheta1 = quantize(theta1, theta1_quantum)
+            if actual_qtheta1 < 0:
+                actual_qtheta1 += 2 * math.pi
 
-        actual_qtheta1 = quantize(theta1, theta1_quantum)
-        if actual_qtheta1 < 0:
-            actual_qtheta1 += 2 * math.pi
-            
-        print(f"actual_qtheta1: {actual_qtheta1}")
-        actual_qtheta1_deg = actual_qtheta1 * 360/(2*math.pi)
+            print(f"actual_qtheta1: {actual_qtheta1}")
+            actual_qtheta1_deg = actual_qtheta1 * 360/(2*math.pi)
 
-        print(f"actual_qtheta1_deg = {actual_qtheta1_deg}")
-        assert abs(actual_qtheta1 - q_theta1) < 1e-4, f"qtheta1 was actually {round(actual_qtheta1_deg, 3)}, " + \
-            f"expected {round(q_theta1_deg, 3)}"
-    
-    # run the simulation
-    s = State(init_vec, save_states=True)
+            print(f"actual_qtheta1_deg = {actual_qtheta1_deg}")
+            assert abs(actual_qtheta1 - q_theta1) < 1e-4, f"qtheta1 was actually {round(actual_qtheta1_deg, 3)}, " + \
+                f"expected {round(q_theta1_deg, 3)}"
 
-    s.command = alpha_prev_list[-1]
+        # run the simulation
+        s = State(init_vec, save_states=True)
 
-    if skip_checks:
-        cmd_list.append(cmd_list[-1]) # simulate one extra step
-    
-    s.simulate(cmd_list, stdout=False)
-    print("Simulation completed.\n")
+        s.command = alpha_prev_list[-1]
 
-    if not skip_checks:
+        if skip_checks:
+            cmd_list.append(cmd_list[-1]) # simulate one extra step
 
-        # extra printing on trace
-        if False:
-            for i, (net, state8, qstate, qinput, cmd_out) in enumerate(s.qinputs):
-                print(f"{i+1}. network {net} with qinput: {tuple(q for q in qinput)} -> {cmd_out}")
-                print(f"state: {tuple(x for x in state8)}")
-                print(f"qstate: {[x for x in qstate]}")
+        s.simulate(cmd_list, stdout=False)
+        print("Simulation completed.\n")
 
-        expected_end = np.array([end[0], end[1], end[2], end[3], end[4], 0, end[5], 0])
-        print(f"expected end: {expected_end}")
-        print(f"actual end: {s.state8}")
+        if not skip_checks:
 
-        print(f"cmds: {s.commands}, alpha_prev_list: {list(reversed(alpha_prev_list[:-1]))}")
+            # extra printing on trace
+            if False:
+                for i, (net, state8, qstate, qinput, cmd_out) in enumerate(s.qinputs):
+                    print(f"{i+1}. network {net} with qinput: {tuple(q for q in qinput)} -> {cmd_out}")
+                    print(f"state: {tuple(x for x in state8)}")
+                    print(f"qstate: {[x for x in qstate]}")
 
-        assert s.commands == list(reversed(alpha_prev_list[:-1])), "command mismatch"
-        print("commands matched!")
+            expected_end = np.array([end[0], end[1], end[2], end[3], end[4], 0, end[5], 0])
+            print(f"expected end: {expected_end}")
+            print(f"actual end: {s.state8}")
 
-        difference = np.linalg.norm(s.state8 - expected_end, ord=np.inf)
-        print(f"end state difference: {difference}")
-        assert difference < 1e-2, f"end state mismatch. difference was {difference}"
-        print("end states were close enough")
-    else:
-        got_cmds = s.commands[:3]
-        expected_cmds = list(reversed(alpha_prev_list[:-1]))[:3]
-        
-        print(f"Got first few commands: {got_cmds}")
-        print(f"Expected first few commands: {expected_cmds}")
-        
-        print("WARNING: skipped sanity checks on replay")
+            print(f"cmds: {s.commands}, alpha_prev_list: {list(reversed(alpha_prev_list[:-1]))}")
 
-    if rewind_seconds != 0:
-        print(f"commands: {s.commands}")
-        print("WARNING: rewind_seconds != 0")
-        
-    # optional: do plot
-    init_plot()
-    #plot(s, save_mp4=True)
-    #title = f"Unsafe Simulation ($v_{{int}}$={round(int_vel, 2)} ft/sec)"
-    #title = f"Unsafe Simulation ($v_{{own}}$={round(own_vel, 2)} ft/sec)"
-    plot_paper_image(s, rewind_seconds, label, name)
-    plt.clf()
-    plot_paper_image(s, rewind_seconds, label, name, square=True)
+            assert s.commands == list(reversed(alpha_prev_list[:-1])), "command mismatch"
+            print("commands matched!")
+
+            difference = np.linalg.norm(s.state8 - expected_end, ord=np.inf)
+            print(f"end state difference: {difference}")
+            assert difference < 1e-2, f"end state mismatch. difference was {difference}"
+            print("end states were close enough")
+        else:
+            got_cmds = s.commands[:3]
+            expected_cmds = list(reversed(alpha_prev_list[:-1]))[:3]
+
+            print(f"Got first few commands: {got_cmds}")
+            print(f"Expected first few commands: {expected_cmds}")
+
+            print("WARNING: skipped sanity checks on replay")
+
+        if rewind_seconds != 0:
+            print(f"commands: {s.commands}")
+            print("WARNING: rewind_seconds != 0")
+
+        # optional: do plot
+        #plot(s, save_mp4=True)
+        #title = f"Unsafe Simulation ($v_{{int}}$={round(int_vel, 2)} ft/sec)"
+        #title = f"Unsafe Simulation ($v_{{own}}$={round(own_vel, 2)} ft/sec)"
+        plt.clf()
+        plot_paper_image(s, rewind_seconds, label, name)
+        plt.clf()
+
+        show_legend = i == 0
+        plot_paper_image(s, rewind_seconds, label, name, square=True, show_legend=show_legend,
+                         ownship_below=ownship_below)
 
 if __name__ == "__main__":
     main()
