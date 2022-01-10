@@ -307,16 +307,18 @@ def is_real_counterexample(res):
     
     pt = range_pt.copy()
 
-    q_theta1 = s.qtheta1
-    s_copy = deepcopy(s)
+    #q_theta1 = s.qtheta1
+    #s_copy = deepcopy(s)
 
     #pos_quantum = Settings.pos_q
     #mismatch_quantized = False
     #mismatch_continuous = False
     unsafe_continuous = False
+    c_cmd_out = s.alpha_prev_list[-1]
+    assert c_cmd_out == 0
 
-    for i in range(len(s.alpha_prev_list) - 1):
-        net = s.alpha_prev_list[-(i+1)]
+    for _ in s.alpha_prev_list:
+        net = c_cmd_out
         #expected_cmd = s.alpha_prev_list[-(i+2)]
 
         dx = pt[Star.X_INT] - pt[Star.X_OWN]
@@ -360,10 +362,10 @@ def is_real_counterexample(res):
         #    break
 
         #s_copy.backstep(forward=True, forward_alpha_prev=expected_cmd)
-        s_copy.backstep(forward=True, forward_alpha_prev=c_cmd_out)
+        #s_copy.backstep(forward=True, forward_alpha_prev=c_cmd_out)
 
-        #mat = get_time_elapse_mat(expected_cmd, 1.0)
-        #pt = mat @ pt
+        mat = get_time_elapse_mat(c_cmd_out, 1.0)
+        pt = mat @ pt
 
         #delta_q_theta = Settings.cmd_quantum_list[expected_cmd]# * theta1_quantum
         #q_theta1 += delta_q_theta
@@ -408,7 +410,7 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
               'pos', 'vel', 'theta1', 'pos', 'vel', 'pos', 'vel', 'pos', 'vel']
 
     if level >= len(levels):
-        print("Refinement reached max level: {len(levels)}")
+        print(f"Refinement reached max level: {len(levels)}")
         return False
     
     if levels[level] == 'pos':
