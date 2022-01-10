@@ -21,14 +21,14 @@ class Settings:
     single_case_timeout = 120 #15 * 60
     counterexample_start_dist = 20000
 
-    vel_ownship = (100, 1200) # 
-    vel_intruder = (0, 1200) # full range
+    range_vel_ownship = (100, 1200)
+    range_vel_intruder = (0, 1200)
 
     @classmethod
     def init_cmd_quantum_list(cls):
         '''init class variables'''
 
-        theta1_quantum = cls.theta1
+        theta1_quantum = cls.theta1_q
         
         q = 2*pi / (360 / 1.5)
         assert theta1_quantum * round(q/theta1_quantum) - q < 1e-6
