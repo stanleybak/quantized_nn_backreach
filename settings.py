@@ -24,7 +24,7 @@ class Settings:
     range_vel_intruder = (0, 1200)
 
     # maximum counterexamples at top-levell before starting refinement
-    max_counterexamples = 200
+    max_counterexamples = 128
 
     @classmethod
     def init_cmd_quantum_list(cls):

@@ -23,7 +23,6 @@ from dubins import get_time_elapse_mat
 global_start_time = 0.0
 global_params_list: List[Tuple[int, int, int, int, int, int]] = [] # assigned after we get params made
 global_process_id = -1 # assigned in init
-global_max_counterexamples: Optional[int] = None
 
 shared_next_index = multiprocessing.Value('i', 0) # the next index to be done
 shared_next_print_time = multiprocessing.Value('f', 0)
@@ -91,7 +90,7 @@ def increment_index() -> Tuple[int, Tuple[int, int, int, int, int, int]]:
 
     params = global_params_list[next_index]
 
-    if global_max_counterexamples is not None and shared_num_counterexamples.value > global_max_counterexamples:
+    if Settings.max_counterexamples is not None and shared_num_counterexamples.value > Settings.max_counterexamples:
         next_index = -1
 
     return next_index, params
@@ -167,13 +166,11 @@ def make_params(max_index=None):
 
     return params_list
 
-def init_process(q, max_counterexamples):
+def init_process(q):
     """init the process"""
 
     global global_process_id
-    global global_max_counterexamples
 
-    global_max_counterexamples = max_counterexamples
     global_process_id = q.get()
 
     Timers.enabled = False
@@ -197,7 +194,7 @@ def print_result(label, res):
         rad = res['counterexample'].star.get_witness(get_radius=True)[-1]
         print(f"chebeshev radius of witness: {rad}")
 
-def get_counterexamples(backreach_single, indices=None, params=None, max_counterexamples=None):
+def get_counterexamples(backreach_single, indices=None, params=None):
     """get all counterexamples at the current quantization"""
 
     global global_start_time
@@ -242,7 +239,7 @@ def get_counterexamples(backreach_single, indices=None, params=None, max_counter
 
     res_was_none = False
 
-    with multiprocessing.Pool(get_num_cores(), initializer=init_process, initargs=(q, max_counterexamples)) as pool:
+    with multiprocessing.Pool(get_num_cores(), initializer=init_process, initargs=(q, )) as pool:
         res_list = pool.map(backreach_single, range(num_cases), chunksize=1)
         max_runtime = res_list[0]
         timeouts = 0
@@ -473,6 +470,9 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
     if not qstates:
         print("no more qstates after trimming initial states, safe!")
     else:
+        if len(qstates) > Settings.max_counterexamples:
+            qstates = qstates[:Settings.max_counterexamples]
+        
         new_counterexamples, _ = get_counterexamples(backreach_single, params=qstates)
 
         if new_counterexamples:
@@ -485,8 +485,7 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
 def run_all_parallel(backreach_single, indices=None):
     """loop over all cases"""
     
-    counterexamples, max_runtime = get_counterexamples(backreach_single, indices=indices,
-                                                       max_counterexamples=Settings.max_counterexamples)
+    counterexamples, max_runtime = get_counterexamples(backreach_single, indices=indices)
 
     print()
     print_result('longest runtime', max_runtime)
@@ -515,14 +514,13 @@ def run_all_parallel(backreach_single, indices=None):
         print(f"Proven safe after refining: {safe}")
 
 def refine_indices(backreach_single, counterexample_index_list):
-    """a debugging function, refine a specific set of counterexample indices"""
+    """a debuggin function, refine a specific set of counterexample indices"""
 
     assert isinstance(counterexample_index_list, list)
     assert counterexample_index_list, "empty list of counterexamples?"
     assert isinstance(counterexample_index_list[0], int)
     
     max_index = max(counterexample_index_list)
-    print(f"in refine_indices(), max_index={max_index}")
 
     start = time.perf_counter()
     params = make_params(max_index)
@@ -533,11 +531,7 @@ def refine_indices(backreach_single, counterexample_index_list):
 
     params = [params[index] for index in counterexample_index_list]
 
-    if len(params) > Settings.max_counterexamples:
-        params = params[:Settings.max_counterexamples]
-
-    new_counterexamples, _ = get_counterexamples(backreach_single, params=params,
-                                                 max_counterexamples=Settings.max_counterexamples)
+    new_counterexamples, _ = get_counterexamples(backreach_single, params=params)
     rv = True
     
     if new_counterexamples:
