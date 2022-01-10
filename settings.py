@@ -9,7 +9,7 @@ from math import pi
 
 class Settings:
     pos_q = 250 #250
-    vel_q = 50 # 50
+    vel_q = 25 # 50
     theta1_q_deg = 1.5 #1.5 # should divide 1.5 degrees evenly
 
     theta1_q = 2*pi / (360 / theta1_q_deg)
@@ -20,7 +20,7 @@ class Settings:
     # other settings
     single_case_timeout = 120 #15 * 60
     counterexample_start_dist = 20000
-    range_vel_ownship = (1000, 1200)
+    range_vel_ownship = (900, 1000)
     range_vel_intruder = (0, 1200)
 
     # maximum counterexamples before starting refinement
