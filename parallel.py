@@ -533,6 +533,9 @@ def refine_indices(backreach_single, counterexample_index_list):
 
     params = [params[index] for index in counterexample_index_list]
 
+    if len(params) > Settings.max_counterexamples:
+        params = params[:Settings.max_counterexamples]
+
     new_counterexamples, _ = get_counterexamples(backreach_single, params=params,
                                                  max_counterexamples=Settings.max_counterexamples)
     rv = True
