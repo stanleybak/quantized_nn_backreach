@@ -33,22 +33,15 @@ def init_plot():
     p = os.path.join('resources', 'bak_matplotlib.mlpstyle')
     plt.style.use(['bmh', p])
 
-def load_network(last_cmd):
-    '''load the one neural network as a 2-tuple (range_for_scaling, means_for_scaling)'''
+def load_network(last_cmd, tau):
+    '''load onnx neural network and return (session, range_for_scaling, means_for_scaling)'''
 
-    onnx_filename = f"ACASXU_run2a_{last_cmd + 1}_1_batch_2000.onnx"
-
-    #print(f"Loading {mat_filename}...")
-    #matfile = loadmat(mat_filename)
-    #range_for_scaling = matfile['range_for_scaling'][0]
-    #means_for_scaling = matfile['means_for_scaling'][0]
-    #mat_filename = f"ACASXU_run2a_1_1_batch_2000.mat"
+    onnx_filename = f"resources/ACASXU_run2a_{last_cmd + 1}_{tau + 1}_batch_2000.onnx"
 
     means_for_scaling = [19791.091, 0.0, 0.0, 650.0, 600.0, 7.5188840201005975]
     range_for_scaling = [60261.0, 6.28318530718, 6.28318530718, 1100.0, 1200.0]
 
-    path = os.path.join("resources", onnx_filename)
-    session = ort.InferenceSession(path)
+    session = ort.InferenceSession(onnx_filename)
 
     # warm up the network
     i = np.array([0, 1, 2, 3, 4], dtype=np.float32)
@@ -58,14 +51,43 @@ def load_network(last_cmd):
     return session, range_for_scaling, means_for_scaling
 
 def load_networks():
-    '''load the 5 neural networks into nn-enum's data structures and return them as a list'''
+    '''load the 45 neural networks into nn-enum's data structures and return them as a list'''
 
     nets = []
 
     for last_cmd in range(5):
-        nets.append(load_network(last_cmd))
+        for tau in range(9):
+            nets.append(load_network(last_cmd, tau))
 
     return nets
+
+def network_index(alpha_prev:int, tau: float):
+    """get network index"""
+
+    tau_list = [0, 1, 5, 10, 20, 50, 60, 80, 100]
+    tau_index = -1
+
+    if tau <= tau_list[0]:
+        tau_index = 0
+    elif tau >= tau_list[-1]:
+        tau_index = len(tau_list) - 1
+    else:
+        # find the index of the closest tau value, rounding down to break ties
+        
+        for i, tau_min in enumerate(tau_list[:-1]):
+            tau_max = tau_list[i+1]
+
+            if tau_min <= tau <= tau_max:
+                if abs(tau - tau_min) - 1e-6 <= abs(tau - tau_max):
+                    tau_index = i
+                else:
+                    tau_index = i+1
+
+                break
+
+    assert tau_index >= 0, f"tau_index not found for tau = {tau}?"
+
+    return len(tau_list) * alpha_prev + tau_index
 
 def get_time_elapse_mat(command1, dt, command2=0):
     '''get the matrix exponential for the given command
@@ -249,8 +271,13 @@ class State:
 
     time_elapse_mats = init_time_elapse_mats(dt)
 
-    def __init__(self, init_vec, save_states=False):
+    def __init__(self, init_vec, tau_init, tau_dot, save_states=False):
         assert len(init_vec) == 8, "init vec should have length 8"
+        assert tau_dot in [0, -1]
+
+        self.tau_dot = tau_dot
+        self.tau_init = tau_init
+        self.time = 0
         
         self.state8 = np.array(init_vec, dtype=float) # current state
         self.next_nn_update = 0.0
@@ -488,6 +515,7 @@ class State:
         time_elapse_mat = State.time_elapse_mats[self.command][intruder_cmd]
 
         self.state8 = time_elapse_mat @ self.state8
+        self.time += 1
 
         if stdout:
             print(f"state8: {self.state8}")
@@ -501,8 +529,10 @@ class State:
 
         self.u_list = cmd_list
         self.u_list_index = None
+        self.time = 0
 
         assert isinstance(cmd_list, list)
+        assert State.dt == 1.0
         tmax = len(cmd_list) * State.nn_update_rate
 
         t = 0.0
@@ -511,7 +541,10 @@ class State:
             rv = [self.state8.copy()]
 
         #self.min_dist = 0, math.sqrt((self.vec[0] - self.vec[3])**2 + (self.vec[1] - self.vec[4])**2), self.vec.copy()
-        min_dist_sq = (self.state8[0] - self.state8[4])**2 + (self.state8[1] - self.state8[5])**2
+        if self.tau_init == 0:
+            min_dist_sq = (self.state8[0] - self.state8[4])**2 + (self.state8[1] - self.state8[5])**2
+        else:
+            min_dist_sq = np.inf
 
         while t + 1e-6 < tmax:
             self.step(stdout=stdout)
@@ -523,7 +556,9 @@ class State:
 
             t += State.dt
 
-            if cur_dist_sq < min_dist_sq:
+            tau_now = self.tau_now()
+
+            if tau_now == 0 and cur_dist_sq < min_dist_sq:
                 min_dist_sq = cur_dist_sq
             
         self.min_dist = math.sqrt(min_dist_sq)
@@ -535,6 +570,11 @@ class State:
             assert not self.vec_list
             assert not self.commands
             assert not self.int_commands
+
+    def tau_now(self):
+        """return the integer value of tau based on tau_init, tau_dot, and self.vec[-1]"""
+
+        return round(self.tau_init + self.tau_dot * self.time)
 
     def update_command(self, stdout=False):
         'update command based on current state'''
@@ -559,7 +599,8 @@ class State:
         if rho > 60760:
             self.command = 0
         else:
-            net = State.nets[last_command]
+            ni = network_index(last_command, self.tau_now())
+            net = State.nets[ni]
 
             state = [rho, theta, psi, v_own, v_int]
 
@@ -605,7 +646,7 @@ def plot(s, save_mp4=False):
                     Line2D([0], [0], color='r', lw=2)]
 
     axes.legend(custom_lines, ['Strong Left', 'Weak Left', 'Clear of Conflict', 'Weak Right', 'Strong Right'], \
-                fontsize=14, loc='lower left')
+                fontsize=14, loc='upper right')
     
     s.make_artists(axes, show_intruder=True)
     states = [s]
@@ -814,7 +855,7 @@ def slow_int_counterexample():
     name = "sintruder"
     ownship_below = False
 
-    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 40, label, name, ownship_below
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 40, label, name, ownship_below, 0
 
 def fast_own_counterexample():
     """fast ownship counterexample"""
@@ -834,7 +875,7 @@ def fast_own_counterexample():
     name = "fownship"
     ownship_below = True
 
-    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 40, label, name, ownship_below
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 40, label, name, ownship_below, 0
 
 def first_counterexample():
     """first counterexample found with full range"""
@@ -854,7 +895,7 @@ def first_counterexample():
     name = "first"
     ownship_below = True
 
-    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 0, label, name, ownship_below
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 0, label, name, ownship_below, 0
 
 def causecrash_counterexample():
     """counterexample with system causing crash"""
@@ -873,7 +914,7 @@ def causecrash_counterexample():
     name = "causecrash"
     ownship_below = False
 
-    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 12, label, name, ownship_below
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 12, label, name, ownship_below, 0
 
 def leftturn_counterexample():
     """counterexample with left turn"""
@@ -893,7 +934,28 @@ def leftturn_counterexample():
     rewind_seconds = 40
     ownship_below = True
 
-    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below, 0
+
+def taudot_counterexample():
+    """counterexample with nonzero taudot"""
+
+    alpha_prev_list = [4, 4, 4, 4, 4, 4, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0]
+    qtheta1 = 178
+    qv_own = 139
+    qv_int = 189
+    tau_init = 68
+    # chebeshev center radius: 0.12153178460619389
+    end = np.array([ 142.91527541, -468.87153178,  808.6475485 , -324.13768196,
+              0.        , 1181.40166887])
+    start = np.array([-3.31774415e+04,  4.00954379e+04, -3.56135295e+01, -8.70464112e+02,
+           -8.03353135e+04,  1.18140167e+03])
+
+    label = "taudot"
+    name = "taudo"
+    rewind_seconds = 0
+    ownship_below = True
+
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below, tau_init
 
 def main():
     'main entry point'
@@ -903,10 +965,11 @@ def main():
 
     init_plot()
     #case_funcs = [first_counterexample, causecrash_counterexample, fast_own_counterexample, slow_int_counterexample]
-    case_funcs = [causecrash_counterexample]
+    case_funcs = [taudot_counterexample]
 
     for i, case_func in enumerate(case_funcs):
-        alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below = case_func()
+        alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below, tau_init = case_func()
+        tau_dot = 0 if tau_init == 0 else -1
 
         ###################
         #alpha_prev_list, qtheta1, qv_own, qv_int, end, start, label = fast_own_counterexample() #slow_int_counterexample()
@@ -981,7 +1044,7 @@ def main():
                 f"expected {round(q_theta1_deg, 3)}"
 
         # run the simulation
-        s = State(init_vec, save_states=True)
+        s = State(init_vec, tau_init, tau_dot, save_states=True)
 
         s.command = alpha_prev_list[-1]
 
@@ -1014,8 +1077,8 @@ def main():
             assert difference < 1e-2, f"end state mismatch. difference was {difference}"
             print("end states were close enough")
         else:
-            got_cmds = s.commands[:3]
-            expected_cmds = list(reversed(alpha_prev_list[:-1]))[:3]
+            got_cmds = s.commands[rewind_seconds:rewind_seconds+10]
+            expected_cmds = list(reversed(alpha_prev_list[:-1]))[rewind_seconds:rewind_seconds+10]
 
             print(f"Got first few commands: {got_cmds}")
             print(f"Expected first few commands: {expected_cmds}")
@@ -1027,16 +1090,22 @@ def main():
             print("WARNING: rewind_seconds != 0")
 
         # optional: do plot
+        paper = False
         #plot(s, save_mp4=True)
         #title = f"Unsafe Simulation ($v_{{int}}$={round(int_vel, 2)} ft/sec)"
         #title = f"Unsafe Simulation ($v_{{own}}$={round(own_vel, 2)} ft/sec)"
-        plt.clf()
-        plot_paper_image(s, rewind_seconds, label, name)
-        plt.clf()
+        if not paper:
+            plot(s, save_mp4=False)
+            break
+        else:
+            #plot(s, save_mp4=True)
+            plt.clf()
+            plot_paper_image(s, rewind_seconds, label, name)
+            plt.clf()
 
-        show_legend = i == 0
-        plot_paper_image(s, rewind_seconds, label, name, square=True, show_legend=show_legend,
-                         ownship_below=ownship_below)
+            show_legend = i == 0
+            plot_paper_image(s, rewind_seconds, label, name, square=True, show_legend=show_legend,
+                             ownship_below=ownship_below)
 
 if __name__ == "__main__":
     main()

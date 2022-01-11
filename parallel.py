@@ -328,6 +328,9 @@ def is_real_counterexample(res):
     c_cmd_out = s.alpha_prev_list[-1]
     assert c_cmd_out == 0
 
+    if Settings.tau_dot != 0:
+        assert tau + 1 == len(s.alpha_prev_list)
+
     for _ in s.alpha_prev_list:
         #expected_cmd = s.alpha_prev_list[-(i+2)]
 

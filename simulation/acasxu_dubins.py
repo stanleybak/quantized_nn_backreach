@@ -37,12 +37,6 @@ def load_network(last_cmd, tau):
 
     onnx_filename = f"../resources/ACASXU_run2a_{last_cmd + 1}_{tau + 1}_batch_2000.onnx"
 
-    #print(f"Loading {mat_filename}...")
-    #matfile = loadmat(mat_filename)
-    #range_for_scaling = matfile['range_for_scaling'][0]
-    #means_for_scaling = matfile['means_for_scaling'][0]
-    #mat_filename = f"ACASXU_run2a_1_1_batch_2000.mat"
-
     means_for_scaling = [19791.091, 0.0, 0.0, 650.0, 600.0, 7.5188840201005975]
     range_for_scaling = [60261.0, 6.28318530718, 6.28318530718, 1100.0, 1200.0]
 
