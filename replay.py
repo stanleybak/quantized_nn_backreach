@@ -205,8 +205,12 @@ def state8_to_qinput_qstate(state8, stdout=False):
     own_vel = math.sqrt(vxo**2 + vyo**2)
     int_vel = math.sqrt(vxi**2)
 
-    q_v_own = quantize(own_vel, vel_quantum)
-    q_v_int = quantize(int_vel, vel_quantum)
+    if vel_quantum != 0:
+        q_v_own = quantize(own_vel, vel_quantum)
+        q_v_int = quantize(int_vel, vel_quantum)
+    else:
+        q_v_own = own_vel
+        q_v_int = int_vel
 
     if stdout:
         print(f"dx: {dx}")

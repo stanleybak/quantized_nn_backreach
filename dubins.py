@@ -35,9 +35,17 @@ def init_to_constraints(qx: int, qy: int,
     qv_own = qv_own_min, qv_own_min + 1
     qv_int = qv_int_min, qv_int_min + 1
     qtheta1 = qtheta1_min, qtheta1_min + 1
-    
-    v_own = (qv_own[0] * vel_quantum, qv_own[1] * vel_quantum)
-    v_int = (qv_int[0] * vel_quantum, qv_int[1] * vel_quantum)
+
+    if vel_quantum != 0:
+        v_own = (qv_own[0] * vel_quantum, qv_own[1] * vel_quantum)
+        v_int = (qv_int[0] * vel_quantum, qv_int[1] * vel_quantum)
+    else:
+        assert qv_own[0] + 1 == qv_own[1] and qv_int[0] + 1 == qv_int[1]
+        # fixed velocities
+        
+        v_own = qv_own[0], qv_own[0]
+        v_int = qv_int[0], qv_int[0]
+        
     theta1 = (qtheta1[0] * theta1_quantum, qtheta1[1] * theta1_quantum)
 
     box.append(x)

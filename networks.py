@@ -39,8 +39,13 @@ def get_cmd(alpha_prev, tau_index, qdx, qdy, qtheta1, qv_own, qv_int, stdout=Fal
     dy = pos_quantum / 2 + pos_quantum * qdy
     theta1 = theta1_quantum / 2 + theta1_quantum * qtheta1
     theta2 = 0
-    v_own = vel_quantum / 2 + qv_own * vel_quantum
-    v_int = vel_quantum / 2 + qv_int * vel_quantum
+
+    if vel_quantum != 0:
+        v_own = vel_quantum / 2 + qv_own * vel_quantum
+        v_int = vel_quantum / 2 + qv_int * vel_quantum
+    else:
+        v_own = qv_own
+        v_int = qv_int
 
     # dx is intruder - ownship
 

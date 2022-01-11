@@ -139,15 +139,22 @@ def make_params(max_index=None):
 
     max_qtheta1 = round(2*pi / theta1_quantum)
 
-    qvimin = round(vel_intruder[0]/vel_quantum)
-    qvimax = round(vel_intruder[1]/vel_quantum)
+    if vel_quantum != 0:
+        qvimin = round(vel_intruder[0]/vel_quantum)
+        qvimax = round(vel_intruder[1]/vel_quantum)
 
-    qvomin = round(vel_ownship[0]/vel_quantum)
-    qvomax = round(vel_ownship[1]/vel_quantum)
+        qvomin = round(vel_ownship[0]/vel_quantum)
+        qvomax = round(vel_ownship[1]/vel_quantum)
 
-    for i in range(2):
-        assert vel_ownship[i] % vel_quantum < 1e-6
-        assert vel_intruder[i] % vel_quantum < 1e-6
+        for i in range(2):
+            assert vel_ownship[i] % vel_quantum < 1e-6
+            assert vel_intruder[i] % vel_quantum < 1e-6
+    else:
+        qvimin = vel_intruder[0]
+        qvimax = vel_intruder[0] + 1
+
+        qvomin = vel_ownship[0]
+        qvomax = vel_ownship[0] + 1
 
     params_list = []
 
@@ -427,7 +434,7 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
         print(f"Refinement reached max level: {len(levels)}")
         return False
     
-    if levels[level] == 'pos':
+    if levels[level] == 'pos' or (levels[level] == 'vel' and Settings.vel_q == 0):
         print(f"Level {level}: refining q_pos from {Settings.pos_q} to {Settings.pos_q / 2}")
         Settings.pos_q /= 2
     elif levels[level] == 'vel':
