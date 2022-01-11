@@ -12,6 +12,35 @@ from settings import Settings
 
 from timerutil import timed, Timers
 
+def get_tau_index(tau):
+    """get the index of the network given the value of tau in seconds"""
+
+    assert isinstance(tau, int)
+
+    tau_list = (0, 1, 5, 10, 20, 50, 60, 80, 100)
+    tau_index = -1
+
+    if tau <= tau_list[0]:
+        tau_index = 0
+    elif tau >= tau_list[-1]:
+        tau_index = len(tau_list) - 1
+    else:
+        # find the index of the closest tau value, rounding down to break ties
+        
+        for i, tau_min in enumerate(tau_list[:-1]):
+            tau_max = tau_list[i+1]
+
+            if tau_min <= tau <= tau_max:
+                if abs(tau - tau_min) <= abs(tau - tau_max):
+                    tau_index = i
+                else:
+                    tau_index = i+1
+
+                break
+
+    assert tau_index >= 0, f"tau_index not found for tau = {tau}?"
+    return tau_index
+
 def is_init_qx_qy(qx, qy):
     """is this an initial quantized location?
 

@@ -4,20 +4,19 @@ code related to paralell backreachability
 Stanley Bak, Jan 2021
 """
 
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 import time
 import multiprocessing
 import pickle
-from math import pi, floor, atan2, sqrt
-from copy import deepcopy
+from math import pi, atan2, sqrt
 
 import matplotlib.pyplot as plt
 
 from settings import Settings
-from util import to_time_str, get_num_cores, is_init_qx_qy
+from util import to_time_str, get_num_cores, is_init_qx_qy, get_tau_index
 from timerutil import Timers
 from star import Star
-from networks import get_cmd, get_cmd_continuous
+from networks import get_cmd_continuous
 from dubins import get_time_elapse_mat
 
 global_start_time = 0.0
@@ -311,6 +310,7 @@ def is_real_counterexample(res):
     s = res['counterexample']
 
     _, range_pt, radius = s.star.get_witness(get_radius=True)
+    tau = s.tau
 
     if radius < 1e-6:
         #print(f"chebeshev radius was too small ({radius}), skipping replay")
@@ -329,7 +329,6 @@ def is_real_counterexample(res):
     assert c_cmd_out == 0
 
     for _ in s.alpha_prev_list:
-        net = c_cmd_out
         #expected_cmd = s.alpha_prev_list[-(i+2)]
 
         dx = pt[Star.X_INT] - pt[Star.X_OWN]
@@ -340,7 +339,7 @@ def is_real_counterexample(res):
 
         rho = sqrt(dx*dx + dy*dy)
 
-        if rho < 500:
+        if rho < 500 and tau == 0:
             print(f"Non-quantized replay is unsafe (rho={rho})! Real counterexample.")
             print()
             s.print_replay_init()
@@ -361,7 +360,8 @@ def is_real_counterexample(res):
         vint = sqrt(pt[Star.VX_INT]**2 + 0**2)
         cstate = (dx, dy, c_theta1, vown, vint)
 
-        c_cmd_out = get_cmd_continuous(net, *cstate)
+        tau_index = get_tau_index(tau)
+        c_cmd_out = get_cmd_continuous(c_cmd_out, tau_index, *cstate)
 
         #print(f"{i}. net: {net}, cstate: {cstate}, c_cmd: {c_cmd_out}")
         
@@ -382,6 +382,7 @@ def is_real_counterexample(res):
 
         mat = get_time_elapse_mat(c_cmd_out, 1.0)
         pt = mat @ pt
+        tau += Settings.tau_dot
 
         #delta_q_theta = Settings.cmd_quantum_list[expected_cmd]# * theta1_quantum
         #q_theta1 += delta_q_theta

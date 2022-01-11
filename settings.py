@@ -18,13 +18,15 @@ class Settings:
     cmd_quantum_list: List[int] = [] # [0, 1, -1, 2, -2]
 
     # other settings
-    single_case_timeout = 120 #15 * 60
+    single_case_timeout = 300 #15 * 60
     counterexample_start_dist = 20000
-    range_vel_ownship = (900, 1000)
+    range_vel_ownship = (850, 900) #(900, 1000)
     range_vel_intruder = (0, 1200)
 
     # maximum counterexamples before starting refinement
     max_counterexamples = 128
+
+    tau_dot = 0
 
     @classmethod
     def init_cmd_quantum_list(cls):
@@ -39,3 +41,5 @@ class Settings:
         q = 2*pi / (360 / 1.5)
         cls.cmd_quantum_list = [0, round(q/theta1_quantum), -1 * round(q/theta1_quantum),
                                          2 * round(q/theta1_quantum), -2 * round(q/theta1_quantum)]
+
+        assert Settings.tau_dot in [0, -1]

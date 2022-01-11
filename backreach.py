@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from star import Star
 from plotting import Plotter
 from dubins import init_to_constraints, get_time_elapse_mat
-from util import make_qstar, make_large_qstar, is_init_qx_qy, get_num_cores
+from util import make_qstar, make_large_qstar, is_init_qx_qy, get_num_cores, get_tau_index
 from networks import get_cmd
 
 from timerutil import timed
@@ -39,6 +39,8 @@ class State():
                  star: Star):
 
         assert isinstance(qtheta1, int)
+
+        self.tau = 0
         self.qtheta1 = qtheta1
         self.qv_own = qv_own
         self.qv_int = qv_int      
@@ -79,6 +81,7 @@ class State():
         print(f"qtheta1 = {self.qtheta1}")
         print(f"qv_own = {self.qv_own}")
         print(f"qv_int = {self.qv_int}")
+        print(f"tau_init = {self.tau}")
 
         domain_pt, range_pt, rad = self.star.get_witness(get_radius=True)
         print(f"# chebeshev center radius: {rad}")
@@ -109,7 +112,7 @@ class State():
             pos_quantum = Settings.pos_q
 
             for i in range(len(s.alpha_prev_list) - 1):
-                net = s.alpha_prev_list[-(i+1)]
+                alpha_prev = s.alpha_prev_list[-(i+1)]
                 expected_cmd = s.alpha_prev_list[-(i+2)]
 
                 dx = floor((pt[Star.X_INT] - pt[Star.X_OWN]) / pos_quantum)
@@ -117,8 +120,9 @@ class State():
 
                 qstate = (dx, dy, q_theta1, s.qv_own, s.qv_int)
 
-                cmd_out = get_cmd(net, *qstate)
-                print(f"({i+1}). network {net} -> {cmd_out}")
+                tau_index = get_tau_index(s.tau)
+                cmd_out = get_cmd(alpha_prev, tau_index, *qstate)
+                print(f"({i+1}). alpha_prev={alpha_prev}, (tau, tau_index)={s.tau, tau_index} -> {cmd_out}")
                 print(f"state: {list(pt)}")
                 print(f"qstate: {qstate}")
 
@@ -175,8 +179,10 @@ class State():
 
         if forward:
             self.qtheta1 += delta_q_theta
+            self.tau += Settings.tau_dot
         else:
             self.qtheta1 -= delta_q_theta
+            self.tau -= Settings.tau_dot
 
     @timed
     def get_predecessors(self, stdout=False):
@@ -214,7 +220,8 @@ class State():
                     if is_init_qx_qy(qdx, qdy):
                         continue
 
-                    out_cmd = get_cmd(prev_cmd, qdx, qdy, *constants)
+                    tau_index = get_tau_index(self.tau)
+                    out_cmd = get_cmd(prev_cmd, tau_index, qdx, qdy, *constants)
 
                     qstate_to_cmd[qstate] = out_cmd
 

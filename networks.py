@@ -20,7 +20,7 @@ from settings import Settings
 # TODO: check effect on runtime if LRU cache is used here
 @lru_cache(maxsize=int(1e6))
 @timed
-def get_cmd(alpha_prev, qdx, qdy, qtheta1, qv_own, qv_int, stdout=False) -> int:
+def get_cmd(alpha_prev, tau_index, qdx, qdy, qtheta1, qv_own, qv_int, stdout=False) -> int:
     """get the command at the given quantized state
 
     returns cmd
@@ -28,6 +28,7 @@ def get_cmd(alpha_prev, qdx, qdy, qtheta1, qv_own, qv_int, stdout=False) -> int:
 
     assert isinstance(alpha_prev, int) and 0 <= alpha_prev <= 4, f"alpha_prev was {alpha_prev}"
     assert isinstance(qdx, int)
+    assert 0 <= tau_index <= 8, f"tau_index out of bounds: {tau_index}"
 
     pos_quantum = Settings.pos_q
     vel_quantum = Settings.vel_q
@@ -79,12 +80,12 @@ def get_cmd(alpha_prev, qdx, qdy, qtheta1, qv_own, qv_int, stdout=False) -> int:
 
         i = np.array(qinput)
 
-        out = run_network(alpha_prev, i)
+        out = run_network(alpha_prev, tau_index, i)
         cmd = int(np.argmin(out))
 
     return cmd
 
-def get_cmd_continuous(alpha_prev, dx, dy, theta1, v_own, v_int, stdout=False) -> int:
+def get_cmd_continuous(alpha_prev, tau_index, dx, dy, theta1, v_own, v_int) -> int:
     """get the command at the given continuous state
 
     returns cmd
@@ -126,17 +127,17 @@ def get_cmd_continuous(alpha_prev, dx, dy, theta1, v_own, v_int, stdout=False) -
             
         i = np.array(net_input)
 
-        out = run_network(alpha_prev, i)
+        out = run_network(alpha_prev, tau_index, i)
         cmd = int(np.argmin(out))
 
     return cmd
 
 @timed
-def run_network(alpha_prev, x, stdout=False):
+def run_network(alpha_prev, tau_index, x, stdout=False):
     'run the network and return the output'
 
     # cached
-    session = get_network(alpha_prev)
+    session = get_network(alpha_prev, tau_index)
 
     range_for_scaling, means_for_scaling = get_scaling()
 
@@ -170,10 +171,10 @@ def get_scaling():
     return range_for_scaling, means_for_scaling
 
 @lru_cache(maxsize=None)
-def get_network(last_cmd):
+def get_network(alpha_prev, tau_index):
     '''load the one neural network as an ort session'''
 
-    onnx_filename = f"ACASXU_run2a_{last_cmd + 1}_1_batch_2000.onnx"
+    onnx_filename = f"ACASXU_run2a_{alpha_prev + 1}_{tau_index + 1}_batch_2000.onnx"
 
     path = os.path.join("resources", onnx_filename)
     session = ort.InferenceSession(path)
