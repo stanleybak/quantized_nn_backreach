@@ -20,13 +20,13 @@ class Settings:
     # other settings
     single_case_timeout = 300 #15 * 60
     counterexample_start_dist = 20000
-    range_vel_ownship = (850, 900) #(900, 1000)
+    range_vel_ownship = (1150, 1200) #(900, 1000)
     range_vel_intruder = (0, 1200)
 
     # maximum counterexamples before starting refinement
     max_counterexamples = 128
 
-    tau_dot = 0
+    tau_dot = -1
 
     @classmethod
     def init_cmd_quantum_list(cls):
