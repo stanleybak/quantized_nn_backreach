@@ -680,7 +680,7 @@ def plot(s, save_mp4):
     else:
         plt.show()
 
-def make_random_input(seed, intruder_can_turn=True, max_tau=0, num_inputs=125):
+def make_random_input(seed, intruder_can_turn=True, max_tau=0, num_inputs=150):
     """make and return a random input for the system"""
 
     if max_tau > 0:
@@ -692,7 +692,8 @@ def make_random_input(seed, intruder_can_turn=True, max_tau=0, num_inputs=125):
     init_vec = np.zeros(7)
     init_vec[2] = np.pi / 2 # ownship moving up initially
 
-    radius = 20000 + np.random.random() * 45000 # [20000, 65000]
+    #radius = 20000 + np.random.random() * 45000 # [20000, 65000]
+    radius = 60760 + np.random.random() * 2400
     angle = np.random.random() * 2 * np.pi
     int_x = radius * np.cos(angle)
     int_y = radius * np.sin(angle)
@@ -736,7 +737,7 @@ def main():
     interesting_seed = -1
     interesting_state = None
     fixed_seed = None #835526
-    max_tau = 125
+    max_tau = 150
 
     tau_dot = -1 if max_tau > 0 else 0
 
@@ -747,7 +748,6 @@ def main():
         # with 10000 sims, seed 671 has min_dist 4254.5ft
 
         start = time.perf_counter()
-        actual_sims = 0
         num_with_min_dist = 0
 
         for seed in range(num_sims):
@@ -761,22 +761,6 @@ def main():
             v_own = init_velo[0]
             v_int = init_velo[1]
 
-            # reject start states where initial command is not clear-of-conflict
-            state5 = state7_to_state5(init_vec, v_own, v_int)
-
-            if state5[0] > 60760:
-                command = 0 # rho exceeds network limit
-            else:
-                ni = network_index(0, tau_init)
-                res = run_network(State.nets[ni], state5)
-                command = np.argmin(res)
-
-            if command != 0:
-                #need first command to be CoC
-                continue
-
-            actual_sims += 1
-
             # run the simulation
             s = State(init_vec, tau_init, tau_dot, v_own, v_int, save_states=False)
             s.simulate(cmd_list)
@@ -788,9 +772,6 @@ def main():
             if interesting_state is None or s.min_dist < interesting_state.min_dist:
                 interesting_seed = seed
                 interesting_state = s
-
-        percent = 100 * actual_sims / num_sims
-        print(f"\nNum sims after filtering initial states: {actual_sims}/{num_sims} ({percent:.1f}%)")
 
         percent = 100 * num_with_min_dist / num_sims
         print(f"Num sims reaching tau=0: {num_with_min_dist}/{num_sims} ({percent:.1f}%)")

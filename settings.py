@@ -18,10 +18,10 @@ class Settings:
     cmd_quantum_list: List[int] = [] # [0, 1, -1, 2, -2]
 
     # other settings
-    single_case_timeout = 300 #15 * 60
+    single_case_timeout = 60 #15 * 60
     counterexample_start_dist = 60760 + ceil(sqrt(pos_q))
-    range_vel_ownship = (800, 800) #(850, 900) #(1150, 1200)
-    range_vel_intruder = (800, 800) #(0, 1200)
+    range_vel_ownship = (200, 200) #(100, 1200)                                                                         
+    range_vel_intruder = (185, 185) #(0, 1200)
 
     # maximum counterexamples before starting refinement
     max_counterexamples = 128

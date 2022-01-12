@@ -505,8 +505,11 @@ def refine_counterexamples(backreach_single, counterexamples, level=0):
 
     return rv
 
-def run_all_parallel(backreach_single, indices=None):
-    """loop over all cases"""
+def run_all_parallel(backreach_single, tau_dot, indices=None):
+    """loop over all cases, returns true if proven safe witout refining"""
+
+    assert tau_dot in [-1, 0]
+    Settings.tau_dot = tau_dot
     
     counterexamples, max_runtime = get_counterexamples(backreach_single, indices=indices)
 
@@ -532,9 +535,19 @@ def run_all_parallel(backreach_single, indices=None):
     else:
         print(f"Finished passed-in {len(indices)} indices.")
 
-    if counterexamples:
-        safe = refine_counterexamples(backreach_single, counterexamples)
-        print(f"Proven safe after refining: {safe}")
+    if not counterexamples:
+        print("original system had no counterexamples")
+        rv = True
+    else:
+        rv = False
+        counterexamples_safe = refine_counterexamples(backreach_single, counterexamples)
+
+        if counterexamples_safe:
+            print("counterexamples proven safe after refining")
+        else:
+            print("counterexamples were not proven safe")
+
+    return rv
 
 def refine_indices(backreach_single, counterexample_index_list):
     """a debuggin function, refine a specific set of counterexample indices"""
