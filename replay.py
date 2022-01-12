@@ -774,7 +774,7 @@ def plot_paper_image(s, rewind_seconds, title, name, square=False, show_legend=T
 
             theta_deg = theta * 180 / math.pi
             psi_deg = psi * 180 / math.pi
-            prefix = "" if not found_error else "# "
+            prefix = "" if not found_error else "% "
             
             print(f"{prefix}{i+1} & {cmd_str[net]} & ", end='')
 
@@ -945,7 +945,7 @@ def causecrash_counterexample():
     label = "ACAS Xu Causes Crash"
     name = "causecrash"
     ownship_below = False
-    rewind_seconds = 12
+    rewind_seconds = 5
 
     return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below, 0
 
@@ -1031,7 +1031,7 @@ def main():
 
     init_plot()
     #case_funcs = [first_counterexample, causecrash_counterexample, taudot_counterexample, slow_int_counterexample]
-    case_funcs = [slow_int_counterexample]
+    case_funcs = [first_counterexample, fast_own_counterexample]
 
     for i, case_func in enumerate(case_funcs):
         alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below, tau_init = case_func()
@@ -1165,7 +1165,7 @@ def main():
             plot(s, save_mp4=False)
             break
         else:
-            plot(s, name=name, save_mp4=True)
+            #plot(s, name=name, save_mp4=True)
             plt.clf()
             plot_paper_image(s, rewind_seconds, label, name, ownship_below=ownship_below)
             plt.clf()

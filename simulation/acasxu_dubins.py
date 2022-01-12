@@ -699,7 +699,11 @@ def make_random_input(seed, intruder_can_turn=True, max_tau=0, num_inputs=150):
     int_y = radius * np.sin(angle)
     int_heading = np.random.random() * 2 * np.pi
 
-    tau_init = np.random.randint(max_tau + 1)
+    if max_tau == 0:
+        tau_init = 0
+    else:
+        assert max_tau > 25
+        tau_init = 25 + np.random.randint(max_tau + 1 - 25)
 
     init_vec[3] = int_x
     init_vec[4] = int_y
@@ -717,8 +721,8 @@ def make_random_input(seed, intruder_can_turn=True, max_tau=0, num_inputs=150):
     # generate random valid velocities
     #init_velo = [np.random.randint(100, 1146),
     #             np.random.randint(60, 1146)]
-    init_velo = [np.random.randint(100, 1200),
-                 np.random.randint(0, 1200)]
+    init_velo = [100 + np.random.random() * 1100,
+                 np.random.random() * 1200]
 
     return init_vec, cmd_list, init_velo, tau_init
 

@@ -52,7 +52,7 @@ def main():
 
     save_mp4 = args.save_mp4
     intruder_can_turn = False
-    max_tau = 160
+    max_tau = 160 # 160 or 0
     tau_dot = -1 if max_tau > 0 else 0
 
     # home laptop (dt=0.05): 10000000 parallel sims take 5714.9 secs (0.571ms per sim)
@@ -108,7 +108,6 @@ def main():
             remaining_sims -= cur_batch
 
             frac = completed_sims / num_sims
-            percent = round(100 * frac, 3)
             elapsed = time.perf_counter() - start
             total_estimate = (elapsed / frac)
             total_min = round(total_estimate / 60, 1)
@@ -121,8 +120,9 @@ def main():
 
             percent = 100 * num_with_dist / completed_sims
             print(f"num with dist: {num_with_dist} / {completed_sims}: {percent:.4f}%")
-            
-            print(f"{completed_sims}/{num_sims} ({percent}%) total estimate: {total_min}min, ETA: {eta_min} min, " + \
+
+            percent = 100 * completed_sims / num_sims
+            print(f"{completed_sims}/{num_sims} ({percent:.4f}%) total estimate: {total_min}min, ETA: {eta_min} min, " + \
                 f"col: {num_collisions} ({round(100 * num_collisions / completed_sims, 6)}%)")
 
     diff = time.perf_counter() - start
