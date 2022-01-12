@@ -61,8 +61,8 @@ def load_networks():
 
     return nets
 
-def network_index(alpha_prev:int, tau: float):
-    """get network index"""
+def get_tau_index(tau):
+    """get tau index"""
 
     tau_list = [0, 1, 5, 10, 20, 50, 60, 80, 100]
     tau_index = -1
@@ -87,7 +87,14 @@ def network_index(alpha_prev:int, tau: float):
 
     assert tau_index >= 0, f"tau_index not found for tau = {tau}?"
 
-    return len(tau_list) * alpha_prev + tau_index
+    return tau_index
+
+def network_index(alpha_prev:int, tau: float):
+    """get network index"""
+
+    ti = get_tau_index(tau)
+
+    return 9 * alpha_prev + ti
 
 def get_time_elapse_mat(command1, dt, command2=0):
     '''get the matrix exponential for the given command
@@ -623,7 +630,7 @@ class State:
 
         self.qinputs.append((last_command, self.state8, qstate, qinput, self.command))
 
-def plot(s, save_mp4=False):
+def plot(s, name='sim', save_mp4=False):
     """plot a specific simulation"""
     
     dx = s.state8[0] - s.state8[4]
@@ -669,6 +676,8 @@ def plot(s, save_mp4=False):
     #plt.savefig('plot.png')
     #plot_commands(states[0])
 
+    assert len(states) == 1
+
     def animate(f):
         'animate function'
 
@@ -696,7 +705,11 @@ def plot(s, save_mp4=False):
                 for a in s.artists_list():
                     a.set_visible(False)
 
-        time_text.set_text(f'Time: {f * State.dt:.1f}')
+        if states[0].tau_dot != 0:
+            tau = round(states[0].tau_init - f)
+            time_text.set_text(f'Time: {f * State.dt:.1f}, $\\tau = {tau}$')
+        else:
+            time_text.set_text(f'Time: {f * State.dt:.1f}')
 
         artists = [time_text]
 
@@ -712,9 +725,9 @@ def plot(s, save_mp4=False):
     my_anim = animation.FuncAnimation(fig, animate, frames=num_frames, interval=interval, blit=True, repeat=True)
 
     if save_mp4:
-        writer = animation.writers['ffmpeg'](fps=15, metadata=dict(artist='Stanley Bak'), bitrate=1800)
+        writer = animation.writers['ffmpeg'](fps=10, metadata=dict(artist='Stanley Bak'), bitrate=1800)
 
-        my_anim.save('sim.mp4', writer=writer)
+        my_anim.save(f'{name}.mp4', writer=writer)
     else:
         plt.show()
 
@@ -743,11 +756,17 @@ def plot_paper_image(s, rewind_seconds, title, name, square=False, show_legend=T
               f"$v_{{own}}$ = {v_own} ft/sec, and $v_{{int}}$ = {v_int} ft/sec.")
 
         print("\\toprule")
-        print("Step & $\\alpha_\\text{prev}$ & Cmd & $\\rho$ (ft) & $\\theta$ (deg) & $\\psi$ (deg) \\\\")
+        if s.tau_init == 0:
+            print("Step & $\\alpha_\\text{prev}$ & Cmd & $\\rho$ (ft) & $\\theta$ (deg) & $\\psi$ (deg) \\\\")
+        else:
+            print("Step & $\\alpha_\\text{prev}$ & $\\tau$ & Net & Cmd & $\\rho$ (ft) & $\\theta$ (deg) & $\\psi$ (deg) \\\\")
+            
         print("\\midrule")
 
         cmd_str = ["\\textsc{coc}", "\\textsc{wl}", "\\textsc{wr}", "\\textsc{sl}", "\\textsc{sr}"]
         found_error = False
+
+        cur_tau = s.tau_init - rewind_seconds
 
         for i, tup in enumerate(s.qinputs[rewind_seconds:]):
             net, state8, qstate, qinput, cmd = tup
@@ -757,7 +776,15 @@ def plot_paper_image(s, rewind_seconds, title, name, square=False, show_legend=T
             psi_deg = psi * 180 / math.pi
             prefix = "" if not found_error else "# "
             
-            print(f"{prefix}{i+1} & {cmd_str[net]} & {cmd_str[cmd]} & {rho:.1f} & {theta_deg:.2f} & {psi_deg:.2f} \\\\")
+            print(f"{prefix}{i+1} & {cmd_str[net]} & ", end='')
+
+            if s.tau_init != 0:
+                tindex = get_tau_index(cur_tau)
+                net_str = f"$N_{{{cmd+1},{tindex+1}}}$"
+                print(f"{cur_tau} & {net_str} & ", end='')
+                cur_tau -= 1
+
+            print(f"{cmd_str[cmd]} & {rho:.1f} & {theta_deg:.2f} & {psi_deg:.2f} \\\\")
             dx = state8[0] - state8[4]
             dy = state8[1] - state8[5]
 
@@ -799,7 +826,7 @@ def plot_paper_image(s, rewind_seconds, title, name, square=False, show_legend=T
 
 
         axes.legend(custom_lines, ['Strong Left', 'Weak Left', 'Clear of Conflict', 'Weak Right', 'Strong Right'], \
-                    fontsize=14, loc='lower left')
+                    fontsize=14, loc='lower left' if s.tau_init == 0 else 'upper right')
     
     s.make_artists(axes, show_intruder=True, animated=False)
     s.set_plane_visible(True)
@@ -954,10 +981,31 @@ def taudot_counterexample():
     start = np.array([-3.31774415e+04,  4.00954379e+04, -3.56135295e+01, -8.70464112e+02,
            -8.03353135e+04,  1.18140167e+03])
 
-    label = "taudot"
-    name = "taudo"
+    label = "Unsafe Situation with Fast Ownship and $\\tau > 0$"
+    name = "taudot"
     rewind_seconds = 0
-    ownship_below = True
+    ownship_below = False
+
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below, tau_init
+
+def taudot_faster():
+    """counterexample with faster taudo"""
+
+    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0]
+    qtheta1 = 300
+    qv_own = 36
+    qv_int = 47
+    tau_init = 77
+    # chebeshev center radius: 0.3190304196916305
+    end = np.array([ 3.19030420e-01, -3.72114253e+02,  8.12748309e+02, -3.87307595e+02,
+            0.00000000e+00,  1.17531903e+03])
+    start = np.array([-4.31269833e+04, -3.93510738e+04, -3.19030420e-01,  9.00314881e+02,
+           -9.04995653e+04,  1.17531903e+03])
+
+    label = "faster_taudot"
+    name = "faster_taudot"
+    rewind_seconds = 0
+    ownship_below = False
 
     return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below, tau_init
 
@@ -968,8 +1016,8 @@ def main():
     try_without_quantization = True
 
     init_plot()
-    #case_funcs = [first_counterexample, causecrash_counterexample, fast_own_counterexample, slow_int_counterexample]
-    case_funcs = [taudot_counterexample]
+    #case_funcs = [first_counterexample, causecrash_counterexample, taudot_counterexample, slow_int_counterexample]
+    case_funcs = [taudot_faster]
 
     for i, case_func in enumerate(case_funcs):
         alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below, tau_init = case_func()
@@ -1018,6 +1066,7 @@ def main():
         dy = init_vec[1] - 0
         init_rho = math.sqrt(dx**2 + dy**2)
 
+        print(f"init tau: {tau_init}")
         print(f"init rho: {init_rho}")
         print(f"init own vel: {own_vel}")
         print(f"init int vel: {int_vel}")
@@ -1094,7 +1143,7 @@ def main():
             print("WARNING: rewind_seconds != 0")
 
         # optional: do plot
-        paper = False
+        paper = True
         #plot(s, save_mp4=True)
         #title = f"Unsafe Simulation ($v_{{int}}$={round(int_vel, 2)} ft/sec)"
         #title = f"Unsafe Simulation ($v_{{own}}$={round(own_vel, 2)} ft/sec)"
@@ -1102,9 +1151,9 @@ def main():
             plot(s, save_mp4=False)
             break
         else:
-            #plot(s, save_mp4=True)
+            #plot(s, name=name, save_mp4=True)
             plt.clf()
-            plot_paper_image(s, rewind_seconds, label, name)
+            plot_paper_image(s, rewind_seconds, label, name, ownship_below=ownship_below)
             plt.clf()
 
             show_legend = i == 0

@@ -19,9 +19,9 @@ def sim_single(seed, intruder_can_turn, max_tau):
 
     rv = np.inf
 
-    if seed % 1000 == 0:
+    if seed % 10000 == 0:
         print(f"{(seed//1000) % 10}", end='', flush=True)
-    elif seed % 100 == 0:
+    elif seed % 1000 == 0:
         print(".", end='', flush=True)
 
     tau_dot = -1 if max_tau > 0 else 0
@@ -72,8 +72,8 @@ def main():
     tau_dot = -1 if max_tau > 0 else 0
 
     # home laptop (dt=0.05): 10000000 parallel sims take 5714.9 secs (0.571ms per sim)
-    num_sims = 10000 #1000000 * 100 # 100 million, estimated runtime 6 hours
-    batch_size = 50000
+    num_sims = 1000000 * 100 # 100 million, estimated runtime 6 hours
+    batch_size = 1000000
 
     remaining_sims = num_sims
     completed_sims = 0
