@@ -19,9 +19,9 @@ def sim_single(seed, intruder_can_turn, max_tau):
 
     rv = np.inf
 
-    if seed % 10000 == 0:
-        print(f"{(seed//1000) % 10}", end='', flush=True)
-    elif seed % 1000 == 0:
+    if seed % 50000 == 0:
+        print(f"{(seed//50000) % 10}", end='', flush=True)
+    elif seed % 5000 == 0:
         print(".", end='', flush=True)
 
     tau_dot = -1 if max_tau > 0 else 0
@@ -52,7 +52,7 @@ def main():
 
     save_mp4 = args.save_mp4
     intruder_can_turn = False
-    max_tau = 0 #160
+    max_tau = 160
     tau_dot = -1 if max_tau > 0 else 0
 
     # home laptop (dt=0.05): 10000000 parallel sims take 5714.9 secs (0.571ms per sim)
