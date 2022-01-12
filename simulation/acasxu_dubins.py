@@ -737,7 +737,7 @@ def main():
     interesting_seed = -1
     interesting_state = None
     fixed_seed = None #835526
-    max_tau = 150
+    max_tau = 160
 
     tau_dot = -1 if max_tau > 0 else 0
 

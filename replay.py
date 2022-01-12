@@ -657,7 +657,7 @@ def plot(s, name='sim', save_mp4=False):
                     Line2D([0], [0], color='r', lw=2)]
 
     axes.legend(custom_lines, ['Strong Left', 'Weak Left', 'Clear of Conflict', 'Weak Right', 'Strong Right'], \
-                fontsize=14, loc='upper right')
+                fontsize=14, loc='lower left')
     
     s.make_artists(axes, show_intruder=True)
     states = [s]
@@ -744,7 +744,7 @@ def plot_paper_image(s, rewind_seconds, title, name, square=False, show_legend=T
         State.plane_size = int(State.plane_size * 1.33)
 
     # print latex table info
-    qinput = s.qinputs[rewind_seconds][3]
+    qinput = s.qinputs[0][3]
             
     rho, theta, psi, v_own, v_int = qinput
     theta_deg = theta * 180 / math.pi
@@ -752,7 +752,7 @@ def plot_paper_image(s, rewind_seconds, title, name, square=False, show_legend=T
 
     if not square:
         print("\n% Auto-generated")
-        print(f"% The unrounded initial state is $\\rho$ = {rho} ft, $\\theta$ = {theta} deg, $\\psi={psi}$ deg, " + \
+        print(f"% The unrounded initial state is $\\rho$ = {rho} ft, $\\theta$ = {theta} rad, $\\psi={psi}$ rad, " + \
               f"$v_{{own}}$ = {v_own} ft/sec, and $v_{{int}}$ = {v_int} ft/sec.")
 
         print("\\toprule")
@@ -766,9 +766,9 @@ def plot_paper_image(s, rewind_seconds, title, name, square=False, show_legend=T
         cmd_str = ["\\textsc{coc}", "\\textsc{wl}", "\\textsc{wr}", "\\textsc{sl}", "\\textsc{sr}"]
         found_error = False
 
-        cur_tau = s.tau_init - rewind_seconds
+        cur_tau = s.tau_init
 
-        for i, tup in enumerate(s.qinputs[rewind_seconds:]):
+        for i, tup in enumerate(s.qinputs):
             net, state8, qstate, qinput, cmd = tup
             rho, theta, psi, v_own, v_int = qinput
 
@@ -826,7 +826,7 @@ def plot_paper_image(s, rewind_seconds, title, name, square=False, show_legend=T
 
 
         axes.legend(custom_lines, ['Strong Left', 'Weak Left', 'Clear of Conflict', 'Weak Right', 'Strong Right'], \
-                    fontsize=14, loc='lower left' if s.tau_init == 0 else 'upper right')
+                    fontsize=14, loc='lower left')
     
     s.make_artists(axes, show_intruder=True, animated=False)
     s.set_plane_visible(True)
@@ -885,8 +885,9 @@ def slow_int_counterexample():
     label = "Unsafe Simulation with Slow Intruder"
     name = "sintruder"
     ownship_below = False
+    rewind_secs = 54
 
-    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 40, label, name, ownship_below, 0
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_secs, label, name, ownship_below, 0
 
 def fast_own_counterexample():
     """fast ownship counterexample"""
@@ -944,8 +945,9 @@ def causecrash_counterexample():
     label = "ACAS Xu Causes Crash"
     name = "causecrash"
     ownship_below = False
+    rewind_seconds = 12
 
-    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, 12, label, name, ownship_below, 0
+    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below, 0
 
 def leftturn_counterexample():
     """counterexample with left turn"""
@@ -991,21 +993,33 @@ def taudot_counterexample():
 def taudot_faster():
     """counterexample with faster taudo"""
 
-    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0]
-    qtheta1 = 300
-    qv_own = 36
-    qv_int = 47
-    tau_init = 77
-    # chebeshev center radius: 0.3190304196916305
-    end = np.array([ 3.19030420e-01, -3.72114253e+02,  8.12748309e+02, -3.87307595e+02,
-            0.00000000e+00,  1.17531903e+03])
-    start = np.array([-4.31269833e+04, -3.93510738e+04, -3.19030420e-01,  9.00314881e+02,
-           -9.04995653e+04,  1.17531903e+03])
+    alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0]
+    qtheta1 = 1203
+    qv_own = 308
+    qv_int = 383
+    tau_init = 75
+    # chebeshev center radius: 1.5625
+    end = np.array([ 157.8125    , -472.82520614,  880.07472818, -393.54488338,
+              0.        , 1198.4375    ])
+    start = np.array([-4.50466117e+04, -4.13894837e+04, -2.36741160e+01,  9.63767938e+02,
+           -8.98828125e+04,  1.19843750e+03])
 
-    label = "faster_taudot"
+    if False:
+        alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0]
+        qtheta1 = 300
+        qv_own = 36
+        qv_int = 47
+        tau_init = 77
+        # chebeshev center radius: 0.3190304196916305
+        end = np.array([ 3.19030420e-01, -3.72114253e+02,  8.12748309e+02, -3.87307595e+02,
+                0.00000000e+00,  1.17531903e+03])
+        start = np.array([-4.31269833e+04, -3.93510738e+04, -3.19030420e-01,  9.00314881e+02,
+               -9.04995653e+04,  1.17531903e+03])
+
+    label = "Unsafe with $v_{own} > 950$ ft/sec and $\\tau > 0$"
     name = "faster_taudot"
     rewind_seconds = 0
-    ownship_below = False
+    ownship_below = True
 
     return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below, tau_init
 
@@ -1017,7 +1031,7 @@ def main():
 
     init_plot()
     #case_funcs = [first_counterexample, causecrash_counterexample, taudot_counterexample, slow_int_counterexample]
-    case_funcs = [taudot_faster]
+    case_funcs = [slow_int_counterexample]
 
     for i, case_func in enumerate(case_funcs):
         alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below, tau_init = case_func()
@@ -1151,7 +1165,7 @@ def main():
             plot(s, save_mp4=False)
             break
         else:
-            #plot(s, name=name, save_mp4=True)
+            plot(s, name=name, save_mp4=True)
             plt.clf()
             plot_paper_image(s, rewind_seconds, label, name, ownship_below=ownship_below)
             plt.clf()
