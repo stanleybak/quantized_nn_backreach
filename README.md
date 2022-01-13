@@ -1,4 +1,4 @@
-# Verification of Close-Loop ACAS Xu Neural Network Control System using State Quantization and Backreachability
+# Verification of Closed-Loop ACAS Xu Neural Network Control System using State Quantization and Backreachability
 
 This is the code from NFM 2022 submission "Closed-Loop ACAS Xu NNCS is Unsafe:
 Quantized State Backreachability for Verification" by Stanley Bak and Hoang-Dung Tran.
