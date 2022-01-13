@@ -1,5 +1,5 @@
 matplotlib==3.5.0
-numpy==1.20.3
+numpy==1.21
 onnxruntime==1.9.0
 scipy==1.7.2
 swiglpk==5.0.3
