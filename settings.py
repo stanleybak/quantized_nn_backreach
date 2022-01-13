@@ -8,11 +8,14 @@ from math import pi, ceil, sqrt
 # real? counter-example found with quanta: 10,10,0.1
 
 class Settings:
-    pos_q = 250 #250
-    vel_q = 0 # 50
-    theta1_q_deg = 1.5 #1.5 # should divide 1.5 degrees evenly
+    pos_q = 250
+    vel_q = 0
+    theta1_q_deg = 1.5 # should divide 1.5 degrees evenly
+    
+    range_vel_ownship = (200, 200) # full range: (100, 1200)                                                                         
+    range_vel_intruder = (185, 185) # full range: (0, 1200)
 
-    theta1_q = 2*pi / (360 / theta1_q_deg)
+    theta1_q = 2*pi / (360 / theta1_q_deg) # radians
 
     # how many theta1 quanta change for each command
     cmd_quantum_list: List[int] = [] # [0, 1, -1, 2, -2]
@@ -20,8 +23,7 @@ class Settings:
     # other settings
     single_case_timeout = 60 #15 * 60
     counterexample_start_dist = 60760 + ceil(sqrt(pos_q))
-    range_vel_ownship = (200, 200) #(100, 1200)                                                                         
-    range_vel_intruder = (185, 185) #(0, 1200)
+
 
     # maximum counterexamples before starting refinement
     max_counterexamples = 128

@@ -508,28 +508,18 @@ def main():
     Settings.init_cmd_quantum_list()
 
     # emacs hard-warp command: M+x fill-paragraph
-    
-    if get_num_cores() < 50:
-        # 477 is worst WHY?, 166 is 50 secs
-        Settings.single_case_timeout = 300
-        # 
-        #run_single_case(backreach_single, index=947, plot=False)
-        run_all_parallel(backreach_single, 0)#, indices=[705, 706])
+    safe = run_all_parallel(backreach_single, 0)
+
+    if safe:
+        print("completed proof for tau_dot=0 case")
+
+        safe = run_all_parallel(backreach_single, -1)
+        print("completed proof for tau_dot=-1 case")
+        print(f"final proven safe?: {safe}")
     else:
-        # on AWS
-        safe = run_all_parallel(backreach_single, 0)
-
-        if safe:
-            print("completed proof for tau_dot=0 case")
-
-            safe = run_all_parallel(backreach_single, -1)
-            print("completed proof for tau_dot=-1 case")
-            print(f"final proven safe?: {safe}")
-        else:
-            print("not proven safe for for tau_dot = 0")
+        print("not proven safe for for tau_dot = 0")
 
     #refine_indices(backreach_single, counterexample_indices)
 
-    # 373.
 if __name__ == "__main__":
     main()

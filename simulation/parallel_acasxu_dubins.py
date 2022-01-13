@@ -52,12 +52,12 @@ def main():
 
     save_mp4 = args.save_mp4
     intruder_can_turn = False
-    max_tau = 160 # 160 or 0
+    max_tau = 0 # 160 or 0
     tau_dot = -1 if max_tau > 0 else 0
 
     # home laptop (dt=0.05): 10000000 parallel sims take 5714.9 secs (0.571ms per sim)
     batch_size = 1500000
-    num_sims = batch_size * 100 # 150 million
+    num_sims = batch_size * 1 # use "* 100" instead for 150 million
 
     remaining_sims = num_sims
     completed_sims = 0

@@ -1004,25 +1004,13 @@ def taudot_faster():
     start = np.array([-4.50466117e+04, -4.13894837e+04, -2.36741160e+01,  9.63767938e+02,
            -8.98828125e+04,  1.19843750e+03])
 
-    if False:
-        alpha_prev_list = [4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0]
-        qtheta1 = 300
-        qv_own = 36
-        qv_int = 47
-        tau_init = 77
-        # chebeshev center radius: 0.3190304196916305
-        end = np.array([ 3.19030420e-01, -3.72114253e+02,  8.12748309e+02, -3.87307595e+02,
-                0.00000000e+00,  1.17531903e+03])
-        start = np.array([-4.31269833e+04, -3.93510738e+04, -3.19030420e-01,  9.00314881e+02,
-               -9.04995653e+04,  1.17531903e+03])
-
     label = "Unsafe with $v_{own} > 950$ ft/sec and $\\tau > 0$"
     name = "faster_taudot"
     rewind_seconds = 0
     ownship_below = True
 
     return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below, tau_init
-
+    
 def main():
     'main entry point'
 
@@ -1030,8 +1018,8 @@ def main():
     try_without_quantization = True
 
     init_plot()
-    #case_funcs = [first_counterexample, causecrash_counterexample, taudot_counterexample, slow_int_counterexample]
-    case_funcs = [first_counterexample, fast_own_counterexample]
+    case_funcs = [first_counterexample, causecrash_counterexample, taudot_counterexample, slow_int_counterexample]
+    paper = True # false = plot to screen, true = save images, print latex table, and save mp4 video (if uncommented)
 
     for i, case_func in enumerate(case_funcs):
         alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below, tau_init = case_func()
@@ -1157,7 +1145,7 @@ def main():
             print("WARNING: rewind_seconds != 0")
 
         # optional: do plot
-        paper = True
+        
         #plot(s, save_mp4=True)
         #title = f"Unsafe Simulation ($v_{{int}}$={round(int_vel, 2)} ft/sec)"
         #title = f"Unsafe Simulation ($v_{{own}}$={round(own_vel, 2)} ft/sec)"
