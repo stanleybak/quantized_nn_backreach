@@ -969,27 +969,6 @@ def leftturn_counterexample():
 
     return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below, 0
 
-def taudot_counterexample():
-    """counterexample with nonzero taudot"""
-
-    alpha_prev_list = [4, 4, 4, 4, 4, 4, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0]
-    qtheta1 = 178
-    qv_own = 139
-    qv_int = 189
-    tau_init = 68
-    # chebeshev center radius: 0.12153178460619389
-    end = np.array([ 142.91527541, -468.87153178,  808.6475485 , -324.13768196,
-              0.        , 1181.40166887])
-    start = np.array([-3.31774415e+04,  4.00954379e+04, -3.56135295e+01, -8.70464112e+02,
-           -8.03353135e+04,  1.18140167e+03])
-
-    label = "Unsafe Situation with Fast Ownship and $\\tau > 0$"
-    name = "taudot"
-    rewind_seconds = 0
-    ownship_below = False
-
-    return alpha_prev_list, qtheta1, qv_own, qv_int, end, start, rewind_seconds, label, name, ownship_below, tau_init
-
 def taudot_faster():
     """counterexample with faster taudo"""
 
@@ -1018,8 +997,8 @@ def main():
     try_without_quantization = True
 
     init_plot()
-    #case_funcs = [first_counterexample, causecrash_counterexample, taudot_counterexample, slow_int_counterexample]
-    case_funcs = [taudot_counterexample]
+    #case_funcs = [first_counterexample, causecrash_counterexample, taudot_faster, slow_int_counterexample]
+    case_funcs = [taudot_faster]
     paper = True # false = plot to screen, true = save images, print latex table, and save mp4 video (if uncommented)
 
     for i, case_func in enumerate(case_funcs):
