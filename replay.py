@@ -780,7 +780,7 @@ def plot_paper_image(s, rewind_seconds, title, name, square=False, show_legend=T
 
             if s.tau_init != 0:
                 tindex = get_tau_index(cur_tau)
-                net_str = f"$N_{{{cmd+1},{tindex+1}}}$"
+                net_str = f"$N_{{{net+1},{tindex+1}}}$"
                 print(f"{cur_tau} & {net_str} & ", end='')
                 cur_tau -= 1
 
@@ -1018,7 +1018,8 @@ def main():
     try_without_quantization = True
 
     init_plot()
-    case_funcs = [first_counterexample, causecrash_counterexample, taudot_counterexample, slow_int_counterexample]
+    #case_funcs = [first_counterexample, causecrash_counterexample, taudot_counterexample, slow_int_counterexample]
+    case_funcs = [taudot_counterexample]
     paper = True # false = plot to screen, true = save images, print latex table, and save mp4 video (if uncommented)
 
     for i, case_func in enumerate(case_funcs):
