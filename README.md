@@ -1,5 +1,7 @@
 # Closed-Loop Verification of Neural Network Compression of ACAS Xu using State Quantization and Backreachability
 
+Optimizing Branch - working on improving efficiency
+
 This is the code for the paper, "Neural Network Compression of ACAS Xu is Unsafe: Closed-Loop Verification through 
 Quantized State Backreachability" by Stanley Bak and Hoang-Dung Tran, available at https://arxiv.org/abs/2201.06626.
 
